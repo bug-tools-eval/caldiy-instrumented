@@ -154,20 +154,21 @@ export const getConnectedCalendars = async (
           };
         }
         const cals = await calendarInstance.listCalendars();
+        const selectedExternalIds = new Set(selectedCalendars.map((selected) => selected.externalId));
         const calendars: ConnectedCalendar[] = sortBy(
           cals.map((cal: IntegrationCalendar) => {
             return {
               ...cal,
               readOnly: cal.readOnly || false,
               primary: cal.primary || null,
-              isSelected: selectedCalendars.some((selected) => selected.externalId === cal.externalId),
+              isSelected: selectedExternalIds.has(cal.externalId),
               credentialId,
               delegationCredentialId,
             };
           }),
           ["primary"]
         );
-        const primary = calendars.find((item) => item.primary) ?? calendars.find((cal) => cal !== undefined);
+        const primary = calendars.find((item) => item.primary) ?? calendars[0];
         if (!primary) {
           return {
             integration: safeToSendIntegration,

@@ -1022,9 +1022,10 @@ async function handler(
       for (const [groupId, luckyUserPool] of Object.entries(luckyUserPools)) {
         let luckUserFound = false;
         while (luckyUserPool.length > 0 && !luckUserFound) {
-          const freeUsers = luckyUserPool.filter(
-            (user) => !luckyUsers.concat(notAvailableLuckyUsers).find((existing) => existing.id === user.id)
-          );
+          const excludedUserIds = new Set<number>();
+          for (const existing of luckyUsers) excludedUserIds.add(existing.id);
+          for (const existing of notAvailableLuckyUsers) excludedUserIds.add(existing.id);
+          const freeUsers = luckyUserPool.filter((user) => !excludedUserIds.has(user.id));
           // no more freeUsers after subtracting notAvailableLuckyUsers from luckyUsers :(
           if (freeUsers.length === 0) break;
           assertNonEmptyArray(freeUsers); // make sure TypeScript knows it too with an assertion; the error will never be thrown.
@@ -1133,7 +1134,10 @@ async function handler(
     ) {
       // all recurring slots except the first one
       const luckyUsersFromFirstBooking = luckyUsers
-        ? eventTypeWithUsers.users.filter((user) => luckyUsers.find((luckyUserId) => luckyUserId === user.id))
+        ? (() => {
+            const luckyUserIdSet = new Set(luckyUsers);
+            return eventTypeWithUsers.users.filter((user) => luckyUserIdSet.has(user.id));
+          })()
         : [];
       const fixedHosts = eventTypeWithUsers.users.filter((user: IsFixedAwareUser) => user.isFixed);
       users = [...fixedHosts, ...luckyUsersFromFirstBooking];
