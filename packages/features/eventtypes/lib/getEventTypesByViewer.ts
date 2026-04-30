@@ -71,6 +71,8 @@ export const getEventTypesByViewer = async (user: User, filters?: Filters) => {
       fallbackRoles: [MembershipRole.ADMIN, MembershipRole.OWNER],
     }),
   ]);
+  const teamsWithEventTypeReadPermissionSet = new Set(teamsWithEventTypeReadPermission);
+  const teamsWithEventTypeUpdatePermissionSet = new Set(teamsWithEventTypeUpdatePermission);
 
   const eventTypeRepo = new EventTypeRepository(prisma);
   const [profileMemberships, profileEventTypes] = await Promise.all([
@@ -292,7 +294,7 @@ export const getEventTypesByViewer = async (user: User, filters?: Filters) => {
             },
             metadata: {
               membershipCount: team.members.length,
-              readOnly: !teamsWithEventTypeReadPermission.includes(team.id),
+              readOnly: !teamsWithEventTypeReadPermissionSet.has(team.id),
             },
             eventTypes: eventTypes
               .filter(filterByTeamIds)
@@ -301,7 +303,7 @@ export const getEventTypesByViewer = async (user: User, filters?: Filters) => {
                 return res;
               })
               .filter((evType) =>
-                !teamsWithEventTypeUpdatePermission.includes(team.id)
+                !teamsWithEventTypeUpdatePermissionSet.has(team.id)
                   ? evType.schedulingType !== SchedulingType.MANAGED
                   : true
               )

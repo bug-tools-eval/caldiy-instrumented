@@ -747,31 +747,31 @@ export class UserAvailabilityService {
 
         const endDateRange = dayjs(end).utc().endOf("day");
 
+        // These don't depend on the date being iterated; compute once per OOO entry.
+        const resolvedNotes = showNotePublicly ? notes : null;
+        const toUserData = toUser
+          ? { id: toUser.id, displayName: toUser.name, username: toUser.username }
+          : null;
+        const fromUserData = { id: user.id, displayName: user.name };
+        const reasonText = reason?.reason || null;
+        const reasonEmoji = reason?.emoji || null;
+
         for (let date = startDateRange; date.isBefore(endDateRange); date = date.add(1, "day")) {
           const dayNumberOnWeek = date.day();
 
           if (!flattenDays.has(dayNumberOnWeek)) {
             continue; // Skip to the next iteration if day not found in flattenDays
           }
-          // null notes if not to be shown publicly
-          if (!showNotePublicly) {
-            notes = null;
-          }
-
-          let toUserData = null;
-          if (toUser) {
-            toUserData = { id: toUser.id, displayName: toUser.name, username: toUser.username };
-          }
 
           acc[date.format("YYYY-MM-DD")] = {
             // @TODO:  would be good having start and end availability time here, but for now should be good
             // you can obtain that from user availability defined outside of here
-            fromUser: { id: user.id, displayName: user.name },
+            fromUser: fromUserData,
             // optional chaining destructuring toUser
             toUser: toUserData,
-            reason: reason?.reason || null,
-            emoji: reason?.emoji || null,
-            notes,
+            reason: reasonText,
+            emoji: reasonEmoji,
+            notes: resolvedNotes,
             showNotePublicly,
           };
         }
