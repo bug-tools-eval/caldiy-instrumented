@@ -183,18 +183,20 @@ export class LuckyUserService implements ILuckyUserService {
       {}
     );
 
-    const attendeeUserIdAndAtCreatedPair = bookingsOfAvailableUsers.reduce(
-      (aggregate: { [userId: number]: Date }, booking) => {
-        availableUsers.forEach((user) => {
-          if (aggregate[user.id]) return;
-          if (!booking.attendees.map((attendee) => attendee.email).includes(user.email)) return;
-          if (organizerIdAndAtCreatedPair[user.id] > booking.createdAt) return;
-          aggregate[user.id] = booking.createdAt;
-        });
-        return aggregate;
-      },
-      {}
-    );
+    const emailToAvailableUserId = new Map<string, number>();
+    for (const user of availableUsers) emailToAvailableUserId.set(user.email, user.id);
+
+    const attendeeUserIdAndAtCreatedPair: { [userId: number]: Date } = {};
+    for (const booking of bookingsOfAvailableUsers) {
+      for (const attendee of booking.attendees) {
+        if (attendee.email == null) continue;
+        const userId = emailToAvailableUserId.get(attendee.email);
+        if (userId === undefined) continue;
+        if (attendeeUserIdAndAtCreatedPair[userId]) continue;
+        if (organizerIdAndAtCreatedPair[userId] > booking.createdAt) continue;
+        attendeeUserIdAndAtCreatedPair[userId] = booking.createdAt;
+      }
+    }
 
     const userIdAndAtCreatedPair = {
       ...organizerIdAndAtCreatedPair,
@@ -818,6 +820,13 @@ export class LuckyUserService implements ILuckyUserService {
     let bookingsOfRemainingAvailableUsersOfInterval = [...bookingsOfAvailableUsersOfInterval];
     const orderedUsersSet = new Set<AvailableUser>();
     const perUserBookingsCount: Record<number, number> = {};
+    const remainingAvailableUserIds = new Set(availableUsers.map((user) => user.id));
+
+    for (const booking of bookingsOfAvailableUsersOfInterval) {
+      const userId = booking.userId;
+      if (userId == null || !remainingAvailableUserIds.has(userId)) continue;
+      perUserBookingsCount[userId] = (perUserBookingsCount[userId] ?? 0) + 1;
+    }
 
     const startTime = performance.now();
     let usersAndTheirBookingShortfalls: {
@@ -853,12 +862,10 @@ export class LuckyUserService implements ILuckyUserService {
       }
 
       orderedUsersSet.add(luckyUser);
-      perUserBookingsCount[luckyUser.id] = bookingsOfAvailableUsersOfInterval.filter(
-        (booking) => booking.userId === luckyUser.id
-      ).length;
+      remainingAvailableUserIds.delete(luckyUser.id);
       remainingAvailableUsers = remainingAvailableUsers.filter((user) => user.id !== luckyUser.id);
       bookingsOfRemainingAvailableUsersOfInterval = bookingsOfRemainingAvailableUsersOfInterval.filter(
-        (booking) => remainingAvailableUsers.map((user) => user.id).includes(booking.userId ?? 0)
+        (booking) => remainingAvailableUserIds.has(booking.userId ?? 0)
       );
     }
 
