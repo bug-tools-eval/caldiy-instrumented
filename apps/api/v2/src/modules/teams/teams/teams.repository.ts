@@ -1,5 +1,5 @@
 import { teamMetadataSchema } from "@calcom/platform-libraries";
-import type { Membership, Prisma } from "@calcom/prisma/client";
+import type { Prisma } from "@calcom/prisma/client";
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaReadService } from "@/modules/prisma/prisma-read.service";
 import { PrismaWriteService } from "@/modules/prisma/prisma-write.service";
@@ -38,12 +38,12 @@ export class TeamsRepository {
       where: {
         teamId,
       },
+      select: {
+        userId: true,
+      },
     });
-    if (!teamMembers || teamMembers.length === 0) {
-      return [];
-    }
 
-    return teamMembers.map((member: Membership) => member.userId);
+    return teamMembers.map((member) => member.userId);
   }
 
   async getTeamManagedUsersIds(teamId: number) {
@@ -54,12 +54,12 @@ export class TeamsRepository {
           isPlatformManaged: true,
         },
       },
+      select: {
+        userId: true,
+      },
     });
-    if (!teamMembers || teamMembers.length === 0) {
-      return [];
-    }
 
-    return teamMembers.map((member: Membership) => member.userId);
+    return teamMembers.map((member) => member.userId);
   }
 
   async getTeamsUserIsMemberOf(userId: number) {
@@ -88,12 +88,16 @@ export class TeamsRepository {
   }
 
   async setDefaultConferencingApp(teamId: number, appSlug?: string, appLink?: string) {
-    const team = await this.getById(teamId);
-    const teamMetadata = teamMetadataSchema.parse(team?.metadata);
+    const team = await this.dbRead.prisma.team.findUnique({
+      where: { id: teamId },
+      select: { metadata: true },
+    });
 
     if (!team) {
-      throw new NotFoundException("user not found");
+      throw new NotFoundException("team not found");
     }
+
+    const teamMetadata = teamMetadataSchema.parse(team.metadata);
 
     return await this.dbWrite.prisma.team.update({
       data: {

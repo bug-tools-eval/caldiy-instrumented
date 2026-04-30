@@ -14,7 +14,6 @@ import {
   handleCancelBooking,
   handleMarkNoShow,
 } from "@calcom/platform-libraries";
-import { makeUserActor } from "@calcom/platform-libraries/bookings";
 import { ErrorCode, HttpError } from "@calcom/platform-libraries/errors";
 import type { ApiResponse } from "@calcom/platform-types";
 import {
@@ -46,13 +45,6 @@ import { ApiQuery, ApiExcludeController as DocsExcludeController } from "@nestjs
 import { Request } from "express";
 import { NextApiRequest } from "next/types";
 import { v4 as uuidv4 } from "uuid";
-import { CreateBookingInput_2024_04_15 } from "@/platform/bookings/2024-04-15/inputs/create-booking.input";
-import { CreateRecurringBookingInput_2024_04_15 } from "@/platform/bookings/2024-04-15/inputs/create-recurring-booking.input";
-import { MarkNoShowInput_2024_04_15 } from "@/platform/bookings/2024-04-15/inputs/mark-no-show.input";
-import { GetBookingOutput_2024_04_15 } from "@/platform/bookings/2024-04-15/outputs/get-booking.output";
-import { GetBookingsOutput_2024_04_15 } from "@/platform/bookings/2024-04-15/outputs/get-bookings.output";
-import { MarkNoShowOutput_2024_04_15 } from "@/platform/bookings/2024-04-15/outputs/mark-no-show.output";
-import { PlatformBookingsService } from "@/platform/bookings/shared/platform-bookings.service";
 import { isApiKey, sha256Hash, stripApiKey } from "@/lib/api-key";
 import { VERSION_2024_04_15, VERSION_2024_06_11, VERSION_2024_06_14 } from "@/lib/api-versions";
 import { PrismaEventTypeRepository } from "@/lib/repositories/prisma-event-type.repository";
@@ -76,6 +68,13 @@ import { OAuthFlowService } from "@/modules/oauth-clients/services/oauth-flow.se
 import { PrismaReadService } from "@/modules/prisma/prisma-read.service";
 import { UsersService } from "@/modules/users/services/users.service";
 import { UsersRepository, UserWithProfile } from "@/modules/users/users.repository";
+import { CreateBookingInput_2024_04_15 } from "@/platform/bookings/2024-04-15/inputs/create-booking.input";
+import { CreateRecurringBookingInput_2024_04_15 } from "@/platform/bookings/2024-04-15/inputs/create-recurring-booking.input";
+import { MarkNoShowInput_2024_04_15 } from "@/platform/bookings/2024-04-15/inputs/mark-no-show.input";
+import { GetBookingOutput_2024_04_15 } from "@/platform/bookings/2024-04-15/outputs/get-booking.output";
+import { GetBookingsOutput_2024_04_15 } from "@/platform/bookings/2024-04-15/outputs/get-bookings.output";
+import { MarkNoShowOutput_2024_04_15 } from "@/platform/bookings/2024-04-15/outputs/mark-no-show.output";
+import { PlatformBookingsService } from "@/platform/bookings/shared/platform-bookings.service";
 
 type BookingRequest = Request & {
   userId?: number;
@@ -504,7 +503,7 @@ export class BookingsController_2024_04_15 {
     }
 
     try {
-      const client = await this.oAuthClientRepository.getOAuthClient(clientId);
+      const client = await this.oAuthClientRepository.getOAuthClientBookingFields(clientId);
       // fetch oAuthClient from db and use data stored in db to set these values
       if (client) {
         res.platformClientId = clientId;

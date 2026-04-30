@@ -1,10 +1,9 @@
-import { EventTypesRepository_2024_06_14 } from "@/platform/event-types/event-types_2024_06_14/event-types.repository";
+import { Injectable } from "@nestjs/common";
+import type { OAuthClientBookingFields } from "@/modules/oauth-clients/oauth-client.repository";
 import { OAuthClientRepository } from "@/modules/oauth-clients/oauth-client.repository";
 import { OAuthClientUsersService } from "@/modules/oauth-clients/services/oauth-clients-users.service";
 import { UsersRepository } from "@/modules/users/users.repository";
-import { Injectable } from "@nestjs/common";
-
-import type { PlatformOAuthClient } from "@calcom/prisma/client";
+import { EventTypesRepository_2024_06_14 } from "@/platform/event-types/event-types_2024_06_14/event-types.repository";
 
 @Injectable()
 export class PlatformBookingsService {
@@ -36,7 +35,7 @@ export class PlatformBookingsService {
   async getOAuthClientParams(eventTypeId: number) {
     const eventType = await this.eventTypesRepository.getEventTypeById(eventTypeId);
 
-    let oAuthClient: PlatformOAuthClient | null = null;
+    let oAuthClient: OAuthClientBookingFields | null = null;
     if (eventType?.userId) {
       oAuthClient = await this.oAuthClientRepository.getByUserId(eventType.userId);
     } else if (eventType?.teamId) {
@@ -65,7 +64,7 @@ export class PlatformBookingsService {
     userId: number | null | undefined;
     teamId: number | null | undefined;
   }) {
-    let oAuthClient: PlatformOAuthClient | null = null;
+    let oAuthClient: OAuthClientBookingFields | null = null;
     if (eventType.userId) {
       oAuthClient = await this.oAuthClientRepository.getByUserId(eventType.userId);
     } else if (eventType.teamId) {

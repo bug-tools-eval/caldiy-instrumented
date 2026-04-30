@@ -3,6 +3,19 @@ import { Injectable } from "@nestjs/common";
 import { PrismaReadService } from "@/modules/prisma/prisma-read.service";
 import { PrismaWriteService } from "@/modules/prisma/prisma-write.service";
 
+const oauthClientBookingSelect = {
+  id: true,
+  bookingCancelRedirectUri: true,
+  bookingRescheduleRedirectUri: true,
+  bookingRedirectUri: true,
+  areEmailsEnabled: true,
+  areCalendarEventsEnabled: true,
+} satisfies Prisma.PlatformOAuthClientSelect;
+
+export type OAuthClientBookingFields = Prisma.PlatformOAuthClientGetPayload<{
+  select: typeof oauthClientBookingSelect;
+}>;
+
 @Injectable()
 export class OAuthClientRepository {
   constructor(
@@ -25,6 +38,37 @@ export class OAuthClientRepository {
   async getOAuthClient(clientId: string): Promise<PlatformOAuthClient | null> {
     return this.dbRead.prisma.platformOAuthClient.findUnique({
       where: { id: clientId },
+    });
+  }
+
+  async getOAuthClientBookingFields(clientId: string): Promise<OAuthClientBookingFields | null> {
+    return this.dbRead.prisma.platformOAuthClient.findUnique({
+      where: { id: clientId },
+      select: oauthClientBookingSelect,
+    });
+  }
+
+  async getOAuthClientPermissionsById(
+    clientId: string
+  ): Promise<Pick<PlatformOAuthClient, "id" | "permissions"> | null> {
+    return this.dbRead.prisma.platformOAuthClient.findUnique({
+      where: { id: clientId },
+      select: {
+        id: true,
+        permissions: true,
+      },
+    });
+  }
+
+  async getOAuthClientOrganizationById(
+    clientId: string
+  ): Promise<Pick<PlatformOAuthClient, "id" | "organizationId"> | null> {
+    return this.dbRead.prisma.platformOAuthClient.findUnique({
+      where: { id: clientId },
+      select: {
+        id: true,
+        organizationId: true,
+      },
     });
   }
 
@@ -112,6 +156,7 @@ export class OAuthClientRepository {
           },
         },
       },
+      select: oauthClientBookingSelect,
     });
   }
 
@@ -124,6 +169,7 @@ export class OAuthClientRepository {
           },
         },
       },
+      select: oauthClientBookingSelect,
     });
   }
 
@@ -139,7 +185,13 @@ export class OAuthClientRepository {
   async getByEventTypeHosts(eventTypeId: number) {
     const hostWithUserPlatformClient = await this.dbRead.prisma.host.findFirst({
       select: {
-        user: { select: { platformOAuthClients: true } },
+        user: {
+          select: {
+            platformOAuthClients: {
+              select: oauthClientBookingSelect,
+            },
+          },
+        },
       },
       where: {
         eventTypeId: eventTypeId,
