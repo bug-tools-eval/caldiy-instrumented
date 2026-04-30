@@ -1,3 +1,4 @@
+import process from "node:process";
 import { loadTranslations } from "@calcom/i18n/server";
 import { BookingStatus } from "@calcom/prisma/enums";
 import { buildLegacyCtx } from "@lib/buildLegacyCtx";
@@ -5,19 +6,36 @@ import type { PageProps as _PageProps } from "app/_types";
 import { _generateMetadata } from "app/_utils";
 import { CustomI18nProvider } from "app/CustomI18nProvider";
 import { withAppDirSsr } from "app/WithAppDirSsr";
+import type { Metadata } from "next";
 import { cookies, headers } from "next/headers";
+import { cache } from "react";
 import OldPage from "~/bookings/views/bookings-single-view";
 import {
   type PageProps as ClientPageProps,
   getServerSideProps,
 } from "~/bookings/views/bookings-single-view.getServerSideProps";
 
-const getData = withAppDirSsr<ClientPageProps>(getServerSideProps);
+const getData: (ctx: ReturnType<typeof buildLegacyCtx>) => Promise<ClientPageProps> =
+  withAppDirSsr<ClientPageProps>(getServerSideProps);
 
-export const generateMetadata = async ({ params, searchParams }: _PageProps) => {
-  const { bookingInfo, eventType, recurringBookings, orgSlug } = await getData(
-    buildLegacyCtx(await headers(), await cookies(), await params, await searchParams)
-  );
+const getCachedData: (serializedParams: string, serializedSearchParams: string) => Promise<ClientPageProps> =
+  cache(async (serializedParams: string, serializedSearchParams: string): Promise<ClientPageProps> => {
+    const params = JSON.parse(serializedParams) as Awaited<_PageProps["params"]>;
+    const searchParams = JSON.parse(serializedSearchParams) as Awaited<_PageProps["searchParams"]>;
+    const legacyCtx = buildLegacyCtx(await headers(), await cookies(), params, searchParams);
+
+    return getData(legacyCtx);
+  });
+
+const getPageProps = async ({ params, searchParams }: _PageProps): Promise<ClientPageProps> => {
+  const serializedParams = JSON.stringify(await params);
+  const serializedSearchParams = JSON.stringify(await searchParams);
+
+  return getCachedData(serializedParams, serializedSearchParams);
+};
+
+const generateMetadata = async ({ params, searchParams }: _PageProps): Promise<Metadata> => {
+  const { bookingInfo, eventType, recurringBookings } = await getPageProps({ params, searchParams });
   const needsConfirmation = bookingInfo.status === BookingStatus.PENDING && eventType.requiresConfirmation;
 
   const metadata = await _generateMetadata(
@@ -39,9 +57,8 @@ export const generateMetadata = async ({ params, searchParams }: _PageProps) => 
   };
 };
 
-const ServerPage = async ({ params, searchParams }: _PageProps) => {
-  const context = buildLegacyCtx(await headers(), await cookies(), await params, await searchParams);
-  const props = await getData(context);
+const ServerPage = async ({ params, searchParams }: _PageProps): Promise<JSX.Element> => {
+  const props = await getPageProps({ params, searchParams });
 
   const eventLocale = props.eventType?.interfaceLanguage;
   if (eventLocale) {
@@ -56,4 +73,6 @@ const ServerPage = async ({ params, searchParams }: _PageProps) => {
 
   return <OldPage {...props} />;
 };
+
+export { generateMetadata };
 export default ServerPage;
