@@ -129,20 +129,22 @@ export const findUsersByUsername = async ({
     orgSlug,
     usernameList,
   });
-  return (
-    await prisma.user.findMany({
-      where,
-      select: {
-        ...userSelect,
-        credentials: {
-          select: credentialForCalendarServiceSelect,
-        },
-        metadata: true,
+  const users = await prisma.user.findMany({
+    where,
+    select: {
+      ...userSelect,
+      credentials: {
+        select: credentialForCalendarServiceSelect,
       },
-    })
-  ).map((_user) => {
+      metadata: true,
+    },
+  });
+  const profileByUserId = profiles
+    ? new Map(profiles.map((profile) => [profile.user.id, profile]))
+    : null;
+  return users.map((_user) => {
     const user = withSelectedCalendars(_user);
-    const profile = profiles?.find((profile) => profile.user.id === user.id) ?? null;
+    const profile = profileByUserId?.get(user.id) ?? null;
     return {
       ...user,
       organizationId: profile?.organizationId ?? null,
