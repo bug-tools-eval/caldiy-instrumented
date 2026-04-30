@@ -24,8 +24,8 @@ export class PlatformBookingsService {
       // note(Lauris): we need to do this when managed user is booking another managed user and the managed user doing the booking entered their email without oAuth client id
       // or if one of the guests added are managed users without oAuth client id in their email.
       const oAuthUserEmail = OAuthClientUsersService.getOAuthUserEmail(platformClientId, attendeeEmail);
-      const oAuthUser = await this.usersRepository.findByEmail(oAuthUserEmail);
-      if (oAuthUser) {
+      const oAuthUserExists = await this.usersRepository.existsByEmail(oAuthUserEmail);
+      if (oAuthUserExists) {
         return oAuthUserEmail;
       }
     }

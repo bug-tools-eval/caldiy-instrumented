@@ -88,6 +88,7 @@ export class OAuthClientRepository {
           where: {
             id: tokenId,
           },
+          take: 1,
           select: {
             id: true,
             owner: {
@@ -112,6 +113,7 @@ export class OAuthClientRepository {
           where: {
             secret: refreshToken,
           },
+          take: 1,
           select: {
             secret: true,
             userId: true,
@@ -188,6 +190,7 @@ export class OAuthClientRepository {
         user: {
           select: {
             platformOAuthClients: {
+              take: 1,
               select: oauthClientBookingSelect,
             },
           },

@@ -214,6 +214,7 @@ export class CredentialRepository {
         userId,
         delegationCredentialId,
       },
+      take: 2,
       select: {
         id: true,
         key: true,

@@ -150,6 +150,19 @@ export class UsersRepository {
     });
   }
 
+  async existsByEmail(email: string): Promise<boolean> {
+    const user = await this.dbRead.prisma.user.findUnique({
+      where: {
+        email,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    return !!user;
+  }
+
   async findByEmailWithProfile(email: string) {
     return this.dbRead.prisma.user.findUnique({
       where: {
