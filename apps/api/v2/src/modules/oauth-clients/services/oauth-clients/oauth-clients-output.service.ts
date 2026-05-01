@@ -1,16 +1,15 @@
-import { Injectable } from "@nestjs/common";
-
-import { PERMISSIONS, PERMISSION_MAP } from "@calcom/platform-constants";
+import { PERMISSION_MAP, PERMISSIONS } from "@calcom/platform-constants";
 import type { PlatformOAuthClientDto } from "@calcom/platform-types";
-import type { PlatformOAuthClient } from "@calcom/prisma/client";
+import { Injectable } from "@nestjs/common";
+import type { OAuthClientOutputFields } from "@/modules/oauth-clients/oauth-client.repository";
 
 @Injectable()
 export class OAuthClientsOutputService {
-  transformOAuthClients(clients: PlatformOAuthClient[]): PlatformOAuthClientDto[] {
+  transformOAuthClients(clients: OAuthClientOutputFields[]): PlatformOAuthClientDto[] {
     return clients.map((client) => this.transformOAuthClient(client));
   }
 
-  transformOAuthClient(client: PlatformOAuthClient): PlatformOAuthClientDto {
+  transformOAuthClient(client: OAuthClientOutputFields): PlatformOAuthClientDto {
     return {
       id: client.id,
       name: client.name,

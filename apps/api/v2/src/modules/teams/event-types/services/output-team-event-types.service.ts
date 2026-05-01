@@ -171,7 +171,7 @@ export class OutputTeamEventTypesService {
   }
 
   async getManagedEventTypeHosts(eventTypeId: number) {
-    const children = await this.teamsEventTypesRepository.getEventTypeChildren(eventTypeId);
+    const children = await this.teamsEventTypesRepository.getEventTypeChildUserIds(eventTypeId);
     const childUserIds = children.flatMap((child) => (child.userId ? [child.userId] : []));
     const users = await this.usersRepository.findHostDisplayByIds(childUserIds);
     const usersById = new Map(users.map((user) => [user.id, user]));

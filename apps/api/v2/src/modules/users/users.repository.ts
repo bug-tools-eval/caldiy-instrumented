@@ -11,6 +11,26 @@ export type UserWithProfile = User & {
   profiles?: (Profile & { organization: Pick<Team, "isPlatform" | "id" | "slug" | "name"> })[];
 };
 
+const managedUserOutputSelect = {
+  id: true,
+  email: true,
+  username: true,
+  name: true,
+  bio: true,
+  timeZone: true,
+  weekStart: true,
+  createdDate: true,
+  timeFormat: true,
+  defaultScheduleId: true,
+  locale: true,
+  avatarUrl: true,
+  metadata: true,
+} satisfies Prisma.UserSelect;
+
+export type ManagedUserOutputFields = Prisma.UserGetPayload<{
+  select: typeof managedUserOutputSelect;
+}>;
+
 @Injectable()
 export class UsersRepository {
   constructor(
@@ -315,7 +335,11 @@ export class UsersRepository {
     });
   }
 
-  async findManagedUsersByOAuthClientId(oauthClientId: string, cursor: number, limit: number) {
+  async findManagedUsersByOAuthClientId(
+    oauthClientId: string,
+    cursor: number,
+    limit: number
+  ): Promise<ManagedUserOutputFields[]> {
     return this.dbRead.prisma.user.findMany({
       where: {
         platformOAuthClients: {
@@ -327,6 +351,7 @@ export class UsersRepository {
       },
       take: limit,
       skip: cursor,
+      select: managedUserOutputSelect,
     });
   }
 
@@ -335,7 +360,7 @@ export class UsersRepository {
     cursor: number,
     limit: number,
     oAuthEmails?: string[]
-  ) {
+  ): Promise<ManagedUserOutputFields[]> {
     return this.dbRead.prisma.user.findMany({
       where: {
         platformOAuthClients: {
@@ -354,6 +379,7 @@ export class UsersRepository {
       },
       take: limit,
       skip: cursor,
+      select: managedUserOutputSelect,
     });
   }
 

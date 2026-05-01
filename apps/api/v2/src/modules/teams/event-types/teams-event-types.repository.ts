@@ -131,6 +131,13 @@ export class TeamsEventTypesRepository {
     });
   }
 
+  async getEventTypeChildUserIds(eventTypeId: number): Promise<{ userId: number | null }[]> {
+    return this.dbRead.prisma.eventType.findMany({
+      where: { parentId: eventTypeId },
+      select: { userId: true },
+    });
+  }
+
   async getEventTypeByIdWithChildren(eventTypeId: number) {
     return this.dbRead.prisma.eventType.findUnique({
       where: { id: eventTypeId },
