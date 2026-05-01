@@ -1,9 +1,6 @@
-import { useEffect } from "react";
-import { shallow } from "zustand/shallow";
-
 import type { Dayjs } from "@calcom/dayjs";
 import dayjs from "@calcom/dayjs";
-import { useEmbedStyles } from "@calcom/embed-core/embed-iframe";
+import { useEmbedStyles, useSlotsViewOnSmallScreen } from "@calcom/embed-core/embed-iframe";
 import { useBookerStoreContext } from "@calcom/features/bookings/Booker/BookerStoreProvider";
 import { getAvailableDatesInMonth } from "@calcom/features/calendars/lib/getAvailableDatesInMonth";
 import type { Slots } from "@calcom/features/calendars/lib/types";
@@ -15,9 +12,9 @@ import classNames from "@calcom/ui/classNames";
 import { Button } from "@calcom/ui/components/button";
 import { SkeletonText } from "@calcom/ui/components/skeleton";
 import { Tooltip } from "@calcom/ui/components/tooltip";
-
+import { useEffect } from "react";
+import { shallow } from "zustand/shallow";
 import NoAvailabilityDialog from "./NoAvailabilityDialog";
-import { useSlotsViewOnSmallScreen } from "@calcom/embed-core/embed-iframe";
 
 export type DatePickerProps = {
   /** which day of the week to render the calendar. Usually Sunday (=0) or Monday (=1) - default: Sunday */
@@ -248,6 +245,12 @@ const Days = ({
     return false;
   };
 
+  // Hoist included/excluded membership checks out of the per-day loop so we
+  // don't re-scan the (potentially large) arrays for every one of 35-42 calendar cells.
+  const includedDatesSet = includedDates ? new Set(includedDates) : null;
+  const excludedDatesSet = new Set(excludedDates);
+  const browsingMonth = browsingDate.month();
+
   const daysToRenderForTheMonth = days.map((day) => {
     if (!day) return { day: null, disabled: true };
 
@@ -255,11 +258,11 @@ const Days = ({
     const daySlots = slots?.[dateKey] || [];
     const oooInfo = daySlots.find((slot) => slot.away) || null;
 
-    const isNextMonth = day.month() !== browsingDate.month();
+    const isNextMonth = day.month() !== browsingMonth;
     const isFirstDayOfNextMonth = isSecondWeekOver && !isCompact && isNextMonth && day.date() === 1;
 
-    const included = includedDates?.includes(dateKey);
-    const excluded = excludedDates.includes(dateKey);
+    const included = includedDatesSet?.has(dateKey);
+    const excluded = excludedDatesSet.has(dateKey);
 
     const hasAvailableSlots = daySlots.some((slot) => !slot.away);
     const isOOOAllDay = daySlots.length > 0 && daySlots.every((slot) => slot.away);
@@ -282,7 +285,7 @@ const Days = ({
    * Takes care of selecting a valid date in the month if the selected date is not available in the month
    */
 
-  const useHandleInitialDateSelection = () => {
+  const handleInitialDateSelection = () => {
     // Don't auto-select date when slots view on small screen is enabled on mobile
     if (slotsViewOnSmallScreen) {
       return;
@@ -293,9 +296,12 @@ const Days = ({
       return;
     }
     const firstAvailableDateOfTheMonth = daysToRenderForTheMonth.find((day) => !day.disabled)?.day;
-    const isSelectedDateAvailable = selected
+    // Hoist yyyymmdd(selected) out of the .some() callback — selected doesn't change
+    // across iterations, so only compute it once per check.
+    const selectedKey = selected ? yyyymmdd(selected) : null;
+    const isSelectedDateAvailable = selectedKey
       ? daysToRenderForTheMonth.some(({ day, disabled }) => {
-          if (day && yyyymmdd(day) === yyyymmdd(selected) && !disabled) return true;
+          if (day && yyyymmdd(day) === selectedKey && !disabled) return true;
         })
       : false;
     if (!isSelectedDateAvailable && firstAvailableDateOfTheMonth) {
@@ -311,7 +317,7 @@ const Days = ({
     }
   };
 
-  useEffect(useHandleInitialDateSelection);
+  useEffect(handleInitialDateSelection);
 
   return (
     <>
