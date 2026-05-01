@@ -44,15 +44,13 @@ export const checkInvalidAppCredentials = async ({ ctx }: checkInvalidAppCredent
     },
   });
 
-  const appNamesAndSlugs: InvalidAppCredentialBannerProps[] = [];
-  for (const app of apps) {
-    if (app.appId) {
-      const appId = app.appId;
+  const appIds = apps.flatMap((app) => (app.appId ? [app.appId] : []));
+
+  return Promise.all(
+    appIds.map(async (appId): Promise<InvalidAppCredentialBannerProps> => {
       const appMeta = await getAppFromSlug(appId);
       const name = appMeta ? appMeta.name : appId;
-      appNamesAndSlugs.push({ slug: appId, name });
-    }
-  }
-
-  return appNamesAndSlugs;
+      return { slug: appId, name };
+    })
+  );
 };
