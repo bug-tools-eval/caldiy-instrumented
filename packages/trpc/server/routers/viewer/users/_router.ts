@@ -1,4 +1,5 @@
 import { WEBAPP_URL } from "@calcom/lib/constants";
+import type { Prisma } from "@calcom/prisma/client";
 import { CreationSource, RedirectType } from "@calcom/prisma/enums";
 import { UserSchema } from "@calcom/prisma/zod/modelSchema/UserSchema";
 import { authedAdminProcedure } from "@calcom/trpc/server/procedures/authedProcedure";
@@ -11,6 +12,27 @@ export type UserAdminRouter = typeof userAdminRouter;
 export type UserAdminRouterOutputs = inferRouterOutputs<UserAdminRouter>;
 
 const userIdSchema = z.object({ userId: z.coerce.number() });
+
+const adminUserSelect = {
+  id: true,
+  name: true,
+  email: true,
+  username: true,
+  bio: true,
+  timeZone: true,
+  weekStart: true,
+  theme: true,
+  defaultScheduleId: true,
+  locale: true,
+  timeFormat: true,
+  allowDynamicBooking: true,
+  identityProvider: true,
+  role: true,
+  avatarUrl: true,
+  locked: true,
+  createdDate: true,
+  movedToProfileId: true,
+} satisfies Prisma.UserSelect;
 
 const userBodySchema = UserSchema.pick({
   name: true,
@@ -39,7 +61,7 @@ const authedAdminProcedureWithRequestedUser = authedAdminProcedure.use(async ({ 
   const parsed = userIdSchema.safeParse(await getRawInput());
   if (!parsed.success) throw new TRPCError({ code: "BAD_REQUEST", message: "User id is required" });
   const { userId: id } = parsed.data;
-  const user = await prisma.user.findUnique({ where: { id } });
+  const user = await prisma.user.findUnique({ where: { id }, select: adminUserSelect });
   if (!user) throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
   return next({
     ctx: {
@@ -57,12 +79,15 @@ export const userAdminRouter = router({
   list: authedAdminProcedure.query(async ({ ctx }) => {
     const { prisma } = ctx;
     // TODO: Add search, pagination, etc.
-    const users = await prisma.user.findMany();
+    const users = await prisma.user.findMany({ select: adminUserSelect });
     return users;
   }),
   add: authedAdminProcedure.input(userBodySchema).mutation(async ({ ctx, input }) => {
     const { prisma } = ctx;
-    const user = await prisma.user.create({ data: { ...input, creationSource: CreationSource.WEBAPP } });
+    const user = await prisma.user.create({
+      data: { ...input, creationSource: CreationSource.WEBAPP },
+      select: adminUserSelect,
+    });
     return { user, message: `User with id: ${user.id} added successfully` };
   }),
   update: authedAdminProcedureWithRequestedUser
@@ -71,7 +96,11 @@ export const userAdminRouter = router({
       const { prisma, requestedUser } = ctx;
 
       const user = await prisma.$transaction(async (tx) => {
-        const userInternal = await tx.user.update({ where: { id: requestedUser.id }, data: input });
+        const userInternal = await tx.user.update({
+          where: { id: requestedUser.id },
+          data: input,
+          select: adminUserSelect,
+        });
 
         // If the profile has been moved to an Org -> we can easily access the profile we need to update
         if (requestedUser.movedToProfileId && input.username) {
