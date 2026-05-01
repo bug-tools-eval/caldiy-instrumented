@@ -6,6 +6,7 @@ import type { MembershipRole } from "@calcom/prisma/enums";
 import { PeriodType } from "@calcom/prisma/enums";
 import type { CustomInputSchema } from "@calcom/prisma/zod-utils";
 import { EventTypeMetaDataSchema } from "@calcom/prisma/zod-utils";
+import type { UserProfile } from "@calcom/types/UserProfile";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import authedProcedure from "../../../procedures/authedProcedure";
@@ -14,12 +15,71 @@ import type { TUpdateInputSchema } from "./types";
 type PermissionString = string;
 class PermissionCheckService {
   constructor(_prisma?: unknown) {}
-  async checkPermission(..._args: unknown[]) { return true; }
-  async hasPermission(..._args: unknown[]) { return true; }
-  async getTeamIdsWithPermission(..._args: unknown[]): Promise<number[]> { return []; }
+  async checkPermission(..._args: unknown[]) {
+    return true;
+  }
+  async hasPermission(..._args: unknown[]) {
+    return true;
+  }
+  async getTeamIdsWithPermission(..._args: unknown[]): Promise<number[]> {
+    return [];
+  }
 }
 
 type EventType = Awaited<ReturnType<EventTypeRepository["findAllByUpId"]>>[number];
+type EventTypeUser = EventType["users"][number];
+type EnrichedEventTypeUser = EventTypeUser & {
+  nonProfileUsername: string | null;
+  profile: UserProfile;
+};
+type EnrichedUsersById = ReadonlyMap<number, EnrichedEventTypeUser>;
+
+const getUsersForEventType = (eventType: EventType): EventTypeUser[] => {
+  if (eventType.hosts?.length) return eventType.hosts.map((host) => host.user);
+  return eventType.users;
+};
+
+const enrichUsersForEventType = async (
+  users: EventTypeUser[],
+  enrichedUsersById?: EnrichedUsersById
+): Promise<EnrichedEventTypeUser[]> => {
+  if (!enrichedUsersById) {
+    return await new UserRepository(prisma).enrichUsersWithTheirProfiles(users);
+  }
+
+  return await Promise.all(
+    users.map(async (user) => {
+      const enrichedUser = enrichedUsersById.get(user.id);
+      if (enrichedUser) return enrichedUser;
+
+      return await new UserRepository(prisma).enrichUserWithItsProfile({
+        user,
+      });
+    })
+  );
+};
+
+export const buildEventTypeUserProfileMap = async (
+  eventTypes: EventType[]
+): Promise<Map<number, EnrichedEventTypeUser>> => {
+  const usersById = new Map<number, EventTypeUser>();
+
+  eventTypes.forEach((eventType) => {
+    getUsersForEventType(eventType).forEach((user) => {
+      usersById.set(user.id, user);
+    });
+    (eventType.children || []).forEach((child) => {
+      child.users.forEach((user) => {
+        usersById.set(user.id, user);
+      });
+    });
+  });
+
+  const enrichedUsers = await new UserRepository(prisma).enrichUsersWithTheirProfiles(
+    Array.from(usersById.values())
+  );
+  return new Map(enrichedUsers.map((user) => [user.id, user]));
+};
 
 export const eventOwnerProcedure = authedProcedure
   .input(
@@ -306,28 +366,15 @@ export function ensureEmailOrPhoneNumberIsPresent(fields: TUpdateInputSchema["bo
   }
 }
 
-export const mapEventType = async (eventType: EventType) => ({
+export const mapEventType = async (eventType: EventType, enrichedUsersById?: EnrichedUsersById) => ({
   ...eventType,
   safeDescription: eventType?.description ? markdownToSafeHTML(eventType.description) : undefined,
-  users: await Promise.all(
-    (eventType?.hosts?.length ? eventType.hosts.map((host) => host.user) : eventType.users).map(async (u) =>
-      new UserRepository(prisma).enrichUserWithItsProfile({
-        user: u,
-      })
-    )
-  ),
+  users: await enrichUsersForEventType(getUsersForEventType(eventType), enrichedUsersById),
   metadata: eventType.metadata ? EventTypeMetaDataSchema.parse(eventType.metadata) : null,
   children: await Promise.all(
     (eventType.children || []).map(async (c) => ({
       ...c,
-      users: await Promise.all(
-        c.users.map(
-          async (u) =>
-            await new UserRepository(prisma).enrichUserWithItsProfile({
-              user: u,
-            })
-        )
-      ),
+      users: await enrichUsersForEventType(c.users, enrichedUsersById),
     }))
   ),
 });
