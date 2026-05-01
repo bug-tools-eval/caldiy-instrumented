@@ -108,8 +108,12 @@ export class OutputBookingsService_2024_08_13 {
     );
     const metadata = safeParse(bookingMetadataSchema, databaseBooking.metadata, defaultBookingMetadata);
     const location = metadata?.videoCallUrl || databaseBooking.location;
-    const rescheduledToUid = await this.getRescheduledToUid(databaseBooking);
-    const rescheduledByEmail = await this.getRescheduledByEmail(databaseBooking);
+    // The two reschedule lookups hit different rows; run them in parallel
+    // to save one DB round-trip per output transformation.
+    const [rescheduledToUid, rescheduledByEmail] = await Promise.all([
+      this.getRescheduledToUid(databaseBooking),
+      this.getRescheduledByEmail(databaseBooking),
+    ]);
 
     const booking = {
       id: databaseBooking.id,
@@ -337,8 +341,10 @@ export class OutputBookingsService_2024_08_13 {
     const duration = dateEnd.diff(dateStart, "minutes").minutes;
     const metadata = safeParse(bookingMetadataSchema, databaseBooking.metadata, defaultBookingMetadata);
     const location = metadata?.videoCallUrl || databaseBooking.location;
-    const rescheduledToUid = await this.getRescheduledToUid(databaseBooking);
-    const rescheduledByEmail = await this.getRescheduledByEmail(databaseBooking);
+    const [rescheduledToUid, rescheduledByEmail] = await Promise.all([
+      this.getRescheduledToUid(databaseBooking),
+      this.getRescheduledByEmail(databaseBooking),
+    ]);
 
     const booking = {
       id: databaseBooking.id,
@@ -428,22 +434,26 @@ export class OutputBookingsService_2024_08_13 {
     bookings: { uid: string; seatUid: string }[],
     userIsEventTypeAdminOrOwner: boolean
   ) {
-    const transformed = [];
+    if (bookings.length === 0) return [];
 
-    for (const booking of bookings) {
-      const databaseBooking =
-        await this.bookingsRepository.getByUidWithAttendeesWithBookingSeatAndUserAndEvent(booking.uid);
+    // Replace per-uid findUnique inside a for loop with a single batched
+    // findMany. With N recurring instances this collapses N round-trips to 1.
+    const uids = bookings.map((b) => b.uid);
+    const databaseBookings =
+      await this.bookingsRepository.getByUidsWithAttendeesWithBookingSeatAndUserAndEvent(uids);
+    const databaseBookingByUid = new Map(databaseBookings.map((b) => [b.uid, b] as const));
+
+    const transformed = bookings.map((booking) => {
+      const databaseBooking = databaseBookingByUid.get(booking.uid);
       if (!databaseBooking) {
         throw new Error(`Booking with uid=${booking.uid} was not found in the database`);
       }
-      transformed.push(
-        this.getOutputCreateRecurringSeatedBooking(
-          databaseBooking,
-          booking.seatUid,
-          userIsEventTypeAdminOrOwner
-        )
+      return this.getOutputCreateRecurringSeatedBooking(
+        databaseBooking,
+        booking.seatUid,
+        userIsEventTypeAdminOrOwner
       );
-    }
+    });
 
     return transformed.sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
   }

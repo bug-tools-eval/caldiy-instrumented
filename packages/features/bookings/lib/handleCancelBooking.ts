@@ -202,23 +202,25 @@ async function handler(input: CancelBookingInput, dependencies?: Dependencies) {
     id: bookingToDelete.userId,
   });
 
-  const attendeesListPromises = [];
-
-  for (const attendee of bookingToDelete.attendees) {
-    attendeesListPromises.push({
-      name: attendee.name,
-      email: attendee.email,
-      timeZone: attendee.timeZone,
-      phoneNumber: attendee.phoneNumber,
-      language: {
-        translate: await getTranslation(attendee.locale ?? "en", "common"),
-        locale: attendee.locale ?? "en",
-      },
-    });
-  }
-
-  const attendeesList = await Promise.all(attendeesListPromises);
-  const tOrganizer = await getTranslation(organizer.locale ?? "en", "common");
+  // Fetch attendee translations in parallel (and alongside the organizer's
+  // translation) instead of awaiting each attendee's getTranslation in a
+  // sequential for loop. With N attendees + 1 organizer this collapses N+1
+  // serial disk reads on the first cache miss into a single Promise.all.
+  const [attendeesList, tOrganizer] = await Promise.all([
+    Promise.all(
+      bookingToDelete.attendees.map(async (attendee) => ({
+        name: attendee.name,
+        email: attendee.email,
+        timeZone: attendee.timeZone,
+        phoneNumber: attendee.phoneNumber,
+        language: {
+          translate: await getTranslation(attendee.locale ?? "en", "common"),
+          locale: attendee.locale ?? "en",
+        },
+      }))
+    ),
+    getTranslation(organizer.locale ?? "en", "common"),
+  ]);
 
   const bookerUrl = process.env.NEXT_PUBLIC_WEBAPP_URL || "https://app.cal.com";
 
