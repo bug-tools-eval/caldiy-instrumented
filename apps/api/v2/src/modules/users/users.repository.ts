@@ -68,6 +68,42 @@ export class UsersRepository {
     });
   }
 
+  async findOrganizationIdById(userId: number): Promise<{ organizationId: number | null } | null> {
+    return this.dbRead.prisma.user.findUnique({
+      where: {
+        id: userId,
+      },
+      select: {
+        organizationId: true,
+      },
+    });
+  }
+
+  async findScheduleDefaultsById(
+    userId: number
+  ): Promise<Pick<User, "defaultScheduleId" | "timeZone"> | null> {
+    return this.dbRead.prisma.user.findUnique({
+      where: {
+        id: userId,
+      },
+      select: {
+        defaultScheduleId: true,
+        timeZone: true,
+      },
+    });
+  }
+
+  async findMetadataById(userId: number): Promise<Pick<User, "metadata"> | null> {
+    return this.dbRead.prisma.user.findUnique({
+      where: {
+        id: userId,
+      },
+      select: {
+        metadata: true,
+      },
+    });
+  }
+
   async findByIdWithinPlatformScope(userId: number, clientId: string) {
     return this.dbRead.prisma.user.findFirst({
       where: {
@@ -142,6 +178,24 @@ export class UsersRepository {
     });
   }
 
+  async findHostDisplayByIds(
+    userIds: number[]
+  ): Promise<Pick<User, "id" | "name" | "username" | "avatarUrl">[]> {
+    return this.dbRead.prisma.user.findMany({
+      where: {
+        id: {
+          in: userIds,
+        },
+      },
+      select: {
+        id: true,
+        name: true,
+        username: true,
+        avatarUrl: true,
+      },
+    });
+  }
+
   async findByIdWithCalendars(userId: number) {
     return this.dbRead.prisma.user.findUnique({
       where: {
@@ -154,10 +208,36 @@ export class UsersRepository {
     });
   }
 
+  async findStripeCustomerFieldsById(
+    userId: number
+  ): Promise<Pick<User, "email" | "name" | "metadata"> | null> {
+    return this.dbRead.prisma.user.findUnique({
+      where: {
+        id: userId,
+      },
+      select: {
+        email: true,
+        name: true,
+        metadata: true,
+      },
+    });
+  }
+
   async findByEmail(email: string) {
     return this.dbRead.prisma.user.findUnique({
       where: {
         email,
+      },
+    });
+  }
+
+  async findIdByEmail(email: string): Promise<{ id: number } | null> {
+    return this.dbRead.prisma.user.findUnique({
+      where: {
+        email,
+      },
+      select: {
+        id: true,
       },
     });
   }

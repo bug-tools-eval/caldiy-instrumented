@@ -89,7 +89,7 @@ export class OAuthClientUsersController {
     @Body() body: CreateManagedUserInput
   ): Promise<CreateManagedUserOutput> {
     this.logger.log(`Creating user for OAuth Client ${oAuthClientId}`);
-    const client = await this.oauthRepository.getOAuthClient(oAuthClientId);
+    const client = await this.oauthRepository.getOAuthClientManagedUserFields(oAuthClientId);
     if (!client) {
       throw new NotFoundException(`OAuth Client with ID ${oAuthClientId} not found`);
     }

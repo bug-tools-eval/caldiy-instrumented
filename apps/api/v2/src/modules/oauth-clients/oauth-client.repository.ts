@@ -16,6 +16,16 @@ export type OAuthClientBookingFields = Prisma.PlatformOAuthClientGetPayload<{
   select: typeof oauthClientBookingSelect;
 }>;
 
+const oauthClientManagedUserSelect = {
+  id: true,
+  organizationId: true,
+  areDefaultEventTypesEnabled: true,
+} satisfies Prisma.PlatformOAuthClientSelect;
+
+export type OAuthClientManagedUserFields = Prisma.PlatformOAuthClientGetPayload<{
+  select: typeof oauthClientManagedUserSelect;
+}>;
+
 @Injectable()
 export class OAuthClientRepository {
   constructor(
@@ -41,10 +51,53 @@ export class OAuthClientRepository {
     });
   }
 
+  async getOAuthClientProviderFields(
+    clientId: string
+  ): Promise<Pick<PlatformOAuthClient, "id" | "organizationId" | "name"> | null> {
+    return this.dbRead.prisma.platformOAuthClient.findUnique({
+      where: { id: clientId },
+      select: {
+        id: true,
+        organizationId: true,
+        name: true,
+      },
+    });
+  }
+
   async getOAuthClientBookingFields(clientId: string): Promise<OAuthClientBookingFields | null> {
     return this.dbRead.prisma.platformOAuthClient.findUnique({
       where: { id: clientId },
       select: oauthClientBookingSelect,
+    });
+  }
+
+  async getOAuthClientRedirectUrisById(
+    clientId: string
+  ): Promise<Pick<PlatformOAuthClient, "redirectUris"> | null> {
+    return this.dbRead.prisma.platformOAuthClient.findUnique({
+      where: { id: clientId },
+      select: {
+        redirectUris: true,
+      },
+    });
+  }
+
+  async getOAuthClientAuthFieldsById(
+    clientId: string
+  ): Promise<Pick<PlatformOAuthClient, "secret" | "organizationId"> | null> {
+    return this.dbRead.prisma.platformOAuthClient.findUnique({
+      where: { id: clientId },
+      select: {
+        secret: true,
+        organizationId: true,
+      },
+    });
+  }
+
+  async getOAuthClientManagedUserFields(clientId: string): Promise<OAuthClientManagedUserFields | null> {
+    return this.dbRead.prisma.platformOAuthClient.findUnique({
+      where: { id: clientId },
+      select: oauthClientManagedUserSelect,
     });
   }
 

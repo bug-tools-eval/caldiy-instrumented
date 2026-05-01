@@ -1,7 +1,4 @@
-import { ApiAuthGuardUser } from "@/modules/auth/strategies/api-auth/api-auth.strategy";
-import { OAuthClientRepository } from "@/modules/oauth-clients/oauth-client.repository";
-import { UsersService } from "@/modules/users/services/users.service";
-import { WebhooksService } from "@/modules/webhooks/services/webhooks.service";
+import type { PlatformOAuthClient, Webhook } from "@calcom/prisma/client";
 import {
   BadRequestException,
   CanActivate,
@@ -11,8 +8,15 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { Request } from "express";
+import { ApiAuthGuardUser } from "@/modules/auth/strategies/api-auth/api-auth.strategy";
+import { OAuthClientRepository } from "@/modules/oauth-clients/oauth-client.repository";
+import { UsersService } from "@/modules/users/services/users.service";
+import { WebhooksService } from "@/modules/webhooks/services/webhooks.service";
 
-import type { PlatformOAuthClient, Webhook } from "@calcom/prisma/client";
+type OAuthClientWebhookRequest = Request & {
+  webhook: Webhook;
+  oAuthClient: Pick<PlatformOAuthClient, "id" | "organizationId">;
+};
 
 @Injectable()
 export class IsOAuthClientWebhookGuard implements CanActivate {
@@ -23,9 +27,7 @@ export class IsOAuthClientWebhookGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const request = context
-      .switchToHttp()
-      .getRequest<Request & { webhook: Webhook; oAuthClient: PlatformOAuthClient }>();
+    const request = context.switchToHttp().getRequest<OAuthClientWebhookRequest>();
     const user = request.user as ApiAuthGuardUser;
     const webhookId = request.params.webhookId;
     const oAuthClientId = request.params.clientId;
@@ -47,7 +49,7 @@ export class IsOAuthClientWebhookGuard implements CanActivate {
       );
     }
 
-    const oAuthClient = await this.oAuthClientRepository.getOAuthClient(oAuthClientId);
+    const oAuthClient = await this.oAuthClientRepository.getOAuthClientOrganizationById(oAuthClientId);
 
     if (!oAuthClient) {
       throw new NotFoundException(`IsOAuthClientWebhookGuard - OAuthClient (${oAuthClientId}) not found`);

@@ -5,11 +5,11 @@ import type {
 } from "@calcom/platform-types";
 import type { Schedule } from "@calcom/prisma/client";
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { UsersRepository } from "@/modules/users/users.repository";
 import { EventTypesRepository_2024_06_14 } from "@/platform/event-types/event-types_2024_06_14/event-types.repository";
 import { SchedulesRepository_2024_06_11 } from "@/platform/schedules/schedules_2024_06_11/schedules.repository";
 import { InputSchedulesService_2024_06_11 } from "@/platform/schedules/schedules_2024_06_11/services/input-schedules.service";
 import { OutputSchedulesService_2024_06_11 } from "@/platform/schedules/schedules_2024_06_11/services/output-schedules.service";
-import { UsersRepository } from "@/modules/users/users.repository";
 
 @Injectable()
 export class SchedulesService_2024_06_11 {
@@ -47,11 +47,11 @@ export class SchedulesService_2024_06_11 {
   }
 
   async getUserScheduleDefault(userId: number): Promise<ScheduleOutput_2024_06_11 | null> {
-    const user = await this.usersRepository.findById(userId);
+    const defaultScheduleId = await this.usersRepository.getUserScheduleDefaultId(userId);
 
-    if (!user?.defaultScheduleId) return null;
+    if (!defaultScheduleId) return null;
 
-    const defaultSchedule = await this.schedulesRepository.getScheduleById(user.defaultScheduleId);
+    const defaultSchedule = await this.schedulesRepository.getScheduleById(defaultScheduleId);
 
     if (!defaultSchedule) return null;
     return this.outputSchedulesService.getResponseSchedule(defaultSchedule);
@@ -91,8 +91,8 @@ export class SchedulesService_2024_06_11 {
     let effectiveScheduleId: number | null = null;
 
     if (userEventType) {
-      const user = await this.usersRepository.findById(userId);
-      effectiveScheduleId = userEventType.scheduleId ?? user?.defaultScheduleId ?? null;
+      const defaultScheduleId = await this.usersRepository.getUserScheduleDefaultId(userId);
+      effectiveScheduleId = userEventType.scheduleId ?? defaultScheduleId;
     } else {
       // if its not a user owned event type, check if it's a team event type where user one of the host
       const eventType = await this.eventTypesRepository.getEventTypeByIdWithHosts(eventTypeId);
@@ -107,9 +107,9 @@ export class SchedulesService_2024_06_11 {
         throw new NotFoundException(`User ${userId} is not associated with event type ${eventTypeId}`);
       }
 
-      const user = await this.usersRepository.findById(userId);
+      const defaultScheduleId = await this.usersRepository.getUserScheduleDefaultId(userId);
 
-      effectiveScheduleId = eventType.scheduleId ?? userHost.scheduleId ?? user?.defaultScheduleId ?? null;
+      effectiveScheduleId = eventType.scheduleId ?? userHost.scheduleId ?? defaultScheduleId;
     }
 
     if (!effectiveScheduleId) {

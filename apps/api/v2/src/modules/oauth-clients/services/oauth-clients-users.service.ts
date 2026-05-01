@@ -1,16 +1,17 @@
 import { CreationSource, createNewUsersConnectToOrgIfExists, slugify } from "@calcom/platform-libraries";
-import type { PlatformOAuthClient, User } from "@calcom/prisma/client";
+import type { User } from "@calcom/prisma/client";
 import { BadRequestException, ConflictException, Injectable, Logger } from "@nestjs/common";
-import { CalendarsService } from "@/platform/calendars/services/calendars.service";
-import { EventTypesService_2024_04_15 } from "@/platform/event-types/event-types_2024_04_15/services/event-types.service";
-import { SchedulesService_2024_04_15 } from "@/platform/schedules/schedules_2024_04_15/services/schedules.service";
 import { Locales } from "@/lib/enums/locales";
 import { GetManagedUsersInput } from "@/modules/oauth-clients/controllers/oauth-client-users/inputs/get-managed-users.input";
+import type { OAuthClientManagedUserFields } from "@/modules/oauth-clients/oauth-client.repository";
 import { ProfilesRepository } from "@/modules/profiles/profiles.repository";
 import { TokensRepository } from "@/modules/tokens/tokens.repository";
 import { CreateManagedUserInput } from "@/modules/users/inputs/create-managed-user.input";
 import { UpdateManagedUserInput } from "@/modules/users/inputs/update-managed-user.input";
 import { UsersRepository } from "@/modules/users/users.repository";
+import { CalendarsService } from "@/platform/calendars/services/calendars.service";
+import { EventTypesService_2024_04_15 } from "@/platform/event-types/event-types_2024_04_15/services/event-types.service";
+import { SchedulesService_2024_04_15 } from "@/platform/schedules/schedules_2024_04_15/services/schedules.service";
 
 @Injectable()
 export class OAuthClientUsersService {
@@ -25,7 +26,7 @@ export class OAuthClientUsersService {
     private readonly profilesRepository: ProfilesRepository
   ) {}
 
-  async createOAuthClientUser(oAuthClient: PlatformOAuthClient, body: CreateManagedUserInput) {
+  async createOAuthClientUser(oAuthClient: OAuthClientManagedUserFields, body: CreateManagedUserInput) {
     const oAuthClientId = oAuthClient.id;
     const organizationId = oAuthClient.organizationId;
 
@@ -111,7 +112,7 @@ export class OAuthClientUsersService {
 
   async getExistingUserByEmail(oAuthClientId: string, email: string) {
     const oAuthEmail = OAuthClientUsersService.getOAuthUserEmail(oAuthClientId, email);
-    return await this.userRepository.findByEmail(oAuthEmail);
+    return await this.userRepository.findIdByEmail(oAuthEmail);
   }
 
   async getManagedUsers(oAuthClientId: string, queryParams: GetManagedUsersInput) {
