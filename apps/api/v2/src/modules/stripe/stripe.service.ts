@@ -1,5 +1,5 @@
 import { SUCCESS_STATUS } from "@calcom/platform-constants";
-import type { Credential, Prisma, User } from "@calcom/prisma/client";
+import type { Prisma, User } from "@calcom/prisma/client";
 import {
   BadRequestException,
   Injectable,
@@ -13,7 +13,10 @@ import { z } from "zod";
 import { stripeKeysResponseSchema } from "./utils/stripeDataSchemas";
 import { AppConfig } from "@/config/type";
 import { AppsRepository } from "@/modules/apps/apps.repository";
-import { CredentialsRepository } from "@/modules/credentials/credentials.repository";
+import {
+  type CredentialForConnectionCheck,
+  CredentialsRepository,
+} from "@/modules/credentials/credentials.repository";
 import { MembershipsRepository } from "@/modules/memberships/memberships.repository";
 import { stripeInstance } from "@/modules/stripe/utils/newStripeInstance";
 import { StripeData } from "@/modules/stripe/utils/stripeDataSchemas";
@@ -116,7 +119,7 @@ export class StripeService {
       userId
     );
 
-    const credentialIdsToDelete = existingCredentials.map((item: Credential) => item.id);
+    const credentialIdsToDelete = existingCredentials.map((item) => item.id);
     if (credentialIdsToDelete.length > 0) {
       await this.appsRepository.deleteAppCredentials(credentialIdsToDelete, userId);
     }
@@ -141,7 +144,7 @@ export class StripeService {
   }
 
   async validateStripeCredentials(
-    credentials?: Credential | null
+    credentials?: CredentialForConnectionCheck | null
   ): Promise<{ status: typeof SUCCESS_STATUS }> {
     if (!credentials) {
       throw new NotFoundException("Credentials for stripe not found.");

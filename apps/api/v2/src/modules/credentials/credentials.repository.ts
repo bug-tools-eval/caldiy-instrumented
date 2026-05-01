@@ -5,6 +5,25 @@ import { Injectable } from "@nestjs/common";
 import { PrismaReadService } from "@/modules/prisma/prisma-read.service";
 import { PrismaWriteService } from "@/modules/prisma/prisma-write.service";
 
+const credentialConnectionSelect = {
+  id: true,
+  invalid: true,
+  key: true,
+} satisfies Prisma.CredentialSelect;
+
+const credentialIdSelect = {
+  id: true,
+} satisfies Prisma.CredentialSelect;
+
+const credentialKeySelect = {
+  id: true,
+  key: true,
+} satisfies Prisma.CredentialSelect;
+
+export type CredentialForConnectionCheck = Prisma.CredentialGetPayload<{
+  select: typeof credentialConnectionSelect;
+}>;
+
 @Injectable()
 export class CredentialsRepository {
   constructor(
@@ -59,7 +78,10 @@ export class CredentialsRepository {
   }
 
   findCredentialByTypeAndUserId(type: string, userId: number) {
-    return this.dbWrite.prisma.credential.findFirst({ where: { type, userId } });
+    return this.dbWrite.prisma.credential.findFirst({
+      where: { type, userId },
+      select: credentialConnectionSelect,
+    });
   }
 
   /** Find a user's credential by type with delegation info (for unified calendar API). */
@@ -78,19 +100,25 @@ export class CredentialsRepository {
   }
 
   findAllCredentialsByTypeAndUserId(type: string, userId: number) {
-    return this.dbWrite.prisma.credential.findMany({ where: { type, userId } });
+    return this.dbWrite.prisma.credential.findMany({ where: { type, userId }, select: credentialIdSelect });
   }
 
   findCredentialByTypeAndTeamId(type: string, teamId: number) {
-    return this.dbWrite.prisma.credential.findFirst({ where: { type, teamId } });
+    return this.dbWrite.prisma.credential.findFirst({
+      where: { type, teamId },
+      select: {
+        id: true,
+        invalid: true,
+      },
+    });
   }
 
   findAllCredentialsByTypeAndTeamId(type: string, teamId: number) {
-    return this.dbWrite.prisma.credential.findMany({ where: { type, teamId } });
+    return this.dbWrite.prisma.credential.findMany({ where: { type, teamId }, select: credentialIdSelect });
   }
 
   getAllUserCredentialsByTypeAndId(type: string, userId: number) {
-    return this.dbRead.prisma.credential.findMany({ where: { type, userId } });
+    return this.dbRead.prisma.credential.findMany({ where: { type, userId }, select: credentialKeySelect });
   }
 
   getUserCredentialsByIds(userId: number, credentialIds: number[]) {
