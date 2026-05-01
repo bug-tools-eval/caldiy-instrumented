@@ -56,6 +56,18 @@ export class UsersRepository {
     });
   }
 
+  async findIdAndUuidById(userId: number): Promise<{ id: number; uuid: string } | null> {
+    return this.dbRead.prisma.user.findUnique({
+      where: {
+        id: userId,
+      },
+      select: {
+        id: true,
+        uuid: true,
+      },
+    });
+  }
+
   async findByIdWithinPlatformScope(userId: number, clientId: string) {
     return this.dbRead.prisma.user.findFirst({
       where: {
@@ -146,6 +158,18 @@ export class UsersRepository {
     return this.dbRead.prisma.user.findUnique({
       where: {
         email,
+      },
+    });
+  }
+
+  async findIdAndUuidByEmail(email: string): Promise<{ id: number; uuid: string } | null> {
+    return this.dbRead.prisma.user.findUnique({
+      where: {
+        email,
+      },
+      select: {
+        id: true,
+        uuid: true,
       },
     });
   }

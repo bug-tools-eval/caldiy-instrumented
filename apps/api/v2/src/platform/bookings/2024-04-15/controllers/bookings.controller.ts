@@ -374,12 +374,7 @@ export class BookingsController_2024_04_15 {
         return null;
       }
 
-      const user = await this.usersRepository.findById(ownerId);
-      if (!user) {
-        return null;
-      }
-
-      return { id: user.id, uuid: user.uuid };
+      return await this.usersRepository.findIdAndUuidById(ownerId);
     } catch (err) {
       this.logger.error(err);
       return null;
@@ -402,7 +397,7 @@ export class BookingsController_2024_04_15 {
     }
 
     if (request.body.rescheduledBy && request.body.rescheduledBy !== request.body.responses.email) {
-      const user = await this.usersRepository.findByEmail(request.body.rescheduledBy);
+      const user = await this.usersRepository.findIdAndUuidByEmail(request.body.rescheduledBy);
       if (!user) {
         return null;
       }
