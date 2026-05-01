@@ -1,18 +1,17 @@
-import { v4 } from "uuid";
-
 import { DailyLocationType, getHumanReadableLocationValue } from "@calcom/app-store/locations";
 import { selectOOOEntries } from "@calcom/app-store/zapier/api/subscriptions/listOOOEntries";
 import dayjs from "@calcom/dayjs";
 import { getCalEventResponses } from "@calcom/features/bookings/lib/getCalEventResponses";
 import tasker from "@calcom/features/tasker";
+import { getTranslation } from "@calcom/i18n/server";
 import logger from "@calcom/lib/logger";
 import { safeStringify } from "@calcom/lib/safeStringify";
 import { withReporting } from "@calcom/lib/sentryWrapper";
-import { getTranslation } from "@calcom/i18n/server";
 import { prisma } from "@calcom/prisma";
-import type { Prisma, Webhook, Booking, ApiKey } from "@calcom/prisma/client";
+import type { ApiKey, Booking, Prisma, Webhook } from "@calcom/prisma/client";
 import { BookingStatus, WebhookTriggerEvents } from "@calcom/prisma/enums";
 import { bookingMetadataSchema } from "@calcom/prisma/zod-utils";
+import { v4 } from "uuid";
 import { DEFAULT_WEBHOOK_VERSION, type WebhookVersion } from "./interface/IWebhookRepository";
 
 const SCHEDULING_TRIGGER: WebhookTriggerEvents[] = [
@@ -508,30 +507,45 @@ export async function updateTriggerForExistingBookings(
   if (bookings.length === 0) return;
 
   if (addedEventTriggers.length > 0 || addedNoShowTriggers.length > 0 || removedNoShowTriggers.length > 0) {
-    const allPromises = bookings.flatMap((booking) => {
-      return [
-        ...addedEventTriggers.map(async (triggerEvent) => {
-          if (NO_SHOW_TRIGGERS.includes(triggerEvent)) return;
-          await scheduleTrigger({
-            booking,
-            subscriberUrl: webhook.subscriberUrl,
-            subscriber: webhook,
-            triggerEvent,
-          });
-        }),
-        ...addedNoShowTriggers.map(async (triggerEvent) => {
-          await scheduleNoShowTaskForBooking(booking, webhook, triggerEvent);
-        }),
-        ...removedNoShowTriggers.map((triggerEvent) =>
-          cancelNoShowTasksForBooking({
-            bookingUid: booking.uid,
-            triggerEvent,
-          })
-        ),
-      ];
-    });
+    // Batch all scheduled-trigger inserts into a single createMany. The previous
+    // implementation fired one prisma.create per booking × trigger (e.g. 200
+    // bookings × 3 triggers = 600 round-trips) — even with Promise.all that is
+    // 600 connections worth of DB pool churn on every webhook trigger update.
+    const scheduledTriggerCreateInputs = bookings.flatMap((booking) =>
+      addedEventTriggers
+        .filter((triggerEvent) => !NO_SHOW_TRIGGERS.includes(triggerEvent))
+        .map((triggerEvent) => ({
+          payload: JSON.stringify({ triggerEvent, ...booking }),
+          appId: webhook.appId,
+          startAfter:
+            triggerEvent === WebhookTriggerEvents.MEETING_ENDED ? booking.endTime : booking.startTime,
+          subscriberUrl: webhook.subscriberUrl,
+          webhookId: webhook.id,
+          bookingId: booking.id,
+        }))
+    );
 
-    await Promise.all(allPromises);
+    const otherPromises = bookings.flatMap((booking) => [
+      ...addedNoShowTriggers.map(async (triggerEvent) => {
+        await scheduleNoShowTaskForBooking(booking, webhook, triggerEvent);
+      }),
+      ...removedNoShowTriggers.map((triggerEvent) =>
+        cancelNoShowTasksForBooking({
+          bookingUid: booking.uid,
+          triggerEvent,
+        })
+      ),
+    ]);
+
+    await Promise.all([
+      scheduledTriggerCreateInputs.length > 0
+        ? prisma.webhookScheduledTriggers.createMany({
+            data: scheduledTriggerCreateInputs,
+            skipDuplicates: true,
+          })
+        : Promise.resolve(),
+      ...otherPromises,
+    ]);
   }
 
   const promise = removedEventTriggers.map((triggerEvent) =>
