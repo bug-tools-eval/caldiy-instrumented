@@ -10,7 +10,10 @@ import type {
 } from "@calcom/features/availability/lib/getUserAvailability";
 import type { IGetAvailableSlots } from "@calcom/features/bookings/Booker/hooks/useAvailableTimeSlots";
 import type { CheckBookingLimitsService } from "@calcom/features/bookings/lib/checkBookingLimits";
-import { checkForConflicts } from "@calcom/features/bookings/lib/conflictChecker/checkForConflicts";
+import {
+  buildSortedBusyTimes,
+  checkForConflicts,
+} from "@calcom/features/bookings/lib/conflictChecker/checkForConflicts";
 
 type QualifiedHostsService = {
   findQualifiedHostsWithDelegationCredentials: (...args: unknown[]) => Promise<{
@@ -569,7 +572,10 @@ export class AvailableSlotsService {
 
             const selectedDuration = (duration || eventType.length) ?? 0;
 
-            const { title: durationTitle, source: durationSource } = LimitSources.eventDurationLimit({ limit, unit });
+            const { title: durationTitle, source: durationSource } = LimitSources.eventDurationLimit({
+              limit,
+              unit,
+            });
 
             if (selectedDuration > limit) {
               limitManager.addBusyTime({
@@ -977,14 +983,16 @@ export class AvailableSlotsService {
       eventType,
     });
 
-    const { eligibleHosts: eligibleQualifiedRRHosts } = await filterBlockedHosts(
-      qualifiedRRHosts,
-      organizationId
-    );
-    const { eligibleHosts: eligibleFixedHosts } = await filterBlockedHosts(fixedHosts, organizationId);
-    const { eligibleHosts: eligibleFallbackRRHosts } = allFallbackRRHosts
-      ? await filterBlockedHosts(allFallbackRRHosts, organizationId)
-      : { eligibleHosts: [] };
+    const [
+      { eligibleHosts: eligibleQualifiedRRHosts },
+      { eligibleHosts: eligibleFixedHosts },
+      eligibleFallbackResult,
+    ] = await Promise.all([
+      filterBlockedHosts(qualifiedRRHosts, organizationId),
+      filterBlockedHosts(fixedHosts, organizationId),
+      allFallbackRRHosts ? filterBlockedHosts(allFallbackRRHosts, organizationId) : null,
+    ]);
+    const eligibleFallbackRRHosts = eligibleFallbackResult?.eligibleHosts ?? [];
 
     const allHosts = [...eligibleQualifiedRRHosts, ...eligibleFixedHosts];
 
@@ -1179,14 +1187,18 @@ export class AvailableSlotsService {
         (item) => item.isSeat && item.eventTypeId === eventType.id
       );
       if (occupiedSeats?.length) {
-        const addedToCurrentSeats: string[] = [];
+        const addedToCurrentSeats = new Set<string>();
         if (typeof availabilityCheckProps.currentSeats !== "undefined") {
+          // Build occupied-seats-by-iso once instead of scanning per current seat.
+          const occupiedSeatCountByIso = new Map<string, number>();
+          for (const seat of occupiedSeats) {
+            const iso = seat.slotUtcStartDate.toISOString();
+            occupiedSeatCountByIso.set(iso, (occupiedSeatCountByIso.get(iso) ?? 0) + 1);
+          }
           availabilityCheckProps.currentSeats = availabilityCheckProps.currentSeats.map((item) => {
-            const attendees =
-              occupiedSeats.filter(
-                (seat) => seat.slotUtcStartDate.toISOString() === item.startTime.toISOString()
-              )?.length || 0;
-            if (attendees) addedToCurrentSeats.push(item.startTime.toISOString());
+            const iso = item.startTime.toISOString();
+            const attendees = occupiedSeatCountByIso.get(iso) ?? 0;
+            if (attendees) addedToCurrentSeats.add(iso);
             return {
               ...item,
               _count: {
@@ -1195,7 +1207,7 @@ export class AvailableSlotsService {
             };
           });
           occupiedSeats = occupiedSeats.filter(
-            (item) => !addedToCurrentSeats.includes(item.slotUtcStartDate.toISOString())
+            (item) => !addedToCurrentSeats.has(item.slotUtcStartDate.toISOString())
           );
         }
 
@@ -1213,12 +1225,14 @@ export class AvailableSlotsService {
         return r;
       }, []);
 
+      const reservedSortedBusyTimes = buildSortedBusyTimes(busySlotsFromReservedSlots);
       availableTimeSlots = availableTimeSlots
         .map((slot) => {
           if (
             !checkForConflicts({
               time: slot.time,
               busy: busySlotsFromReservedSlots,
+              sortedBusyTimes: reservedSortedBusyTimes,
               ...availabilityCheckProps,
             })
           ) {

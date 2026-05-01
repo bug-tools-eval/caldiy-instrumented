@@ -116,6 +116,15 @@ import { isWithinMinimumRescheduleNotice } from "../reschedule/isWithinMinimumRe
 
 const translator = short();
 
+// BLACKLISTED_GUEST_EMAILS doesn't change at runtime; build the lookup Set once
+// instead of split+lowercase+linear-scanning per booking, per guest.
+const BLACKLISTED_GUEST_EMAILS_SET: ReadonlySet<string> = new Set(
+  (process.env.BLACKLISTED_GUEST_EMAILS ?? "")
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter((e) => e.length > 0)
+);
+
 type IsFixedAwareUserWithCredentials = Omit<IsFixedAwareUser, "credentials"> & {
   credentials: CredentialForCalendarService[];
 };
@@ -432,54 +441,72 @@ export interface IBookingServiceDependencies {
   webhookProducer: IWebhookProducerService;
 }
 
-async function validateRescheduleRestrictions({
-  rescheduleUid,
+type RescheduleFetchResult = {
+  bookingSeat: Awaited<ReturnType<typeof getSeatedBooking>>;
+  rescheduleUid: string | null;
+  originalRescheduledBooking: Awaited<ReturnType<typeof getOriginalRescheduledBooking>> | null;
+};
+
+/**
+ * Fetches the bookingSeat and originalRescheduledBooking once so the handler
+ * can reuse them. Previously the handler re-fetched both, doubling DB load on
+ * every reschedule.
+ */
+async function fetchRescheduleContext(
+  reqRescheduleUid: string | null | undefined,
+  eventType: { seatsPerTimeSlot: number | null } | null
+): Promise<RescheduleFetchResult> {
+  if (!reqRescheduleUid) {
+    return { bookingSeat: null, rescheduleUid: null, originalRescheduledBooking: null };
+  }
+  const bookingSeat = await getSeatedBooking(reqRescheduleUid);
+  const actualRescheduleUid = bookingSeat ? bookingSeat.booking.uid : reqRescheduleUid;
+  if (!actualRescheduleUid) {
+    return { bookingSeat, rescheduleUid: null, originalRescheduledBooking: null };
+  }
+  let originalRescheduledBooking: RescheduleFetchResult["originalRescheduledBooking"] = null;
+  try {
+    originalRescheduledBooking = await getOriginalRescheduledBooking(
+      actualRescheduleUid,
+      !!eventType?.seatsPerTimeSlot
+    );
+  } catch {
+    // Booking not found / fetch failed — let the caller handle it later.
+  }
+  return { bookingSeat, rescheduleUid: actualRescheduleUid, originalRescheduledBooking };
+}
+
+function validateRescheduleRestrictions({
+  rescheduleContext,
   userId,
   eventType,
 }: {
-  rescheduleUid: string | null | undefined;
+  rescheduleContext: RescheduleFetchResult;
   userId: number | null;
   eventType: { seatsPerTimeSlot: number | null; minimumRescheduleNotice: number | null } | null;
-}): Promise<void> {
-  if (!rescheduleUid || !eventType) {
+}): void {
+  if (!eventType) {
     return; // Not a reschedule, skip validation
   }
-
-  const bookingSeat = rescheduleUid ? await getSeatedBooking(rescheduleUid) : null;
-  const actualRescheduleUid = bookingSeat ? bookingSeat.booking.uid : rescheduleUid;
-
-  if (!actualRescheduleUid) {
-    return; // No valid reschedule UID
+  const { originalRescheduledBooking } = rescheduleContext;
+  if (!originalRescheduledBooking) {
+    return;
   }
 
-  try {
-    const originalRescheduledBooking = await getOriginalRescheduledBooking(
-      actualRescheduleUid,
-      !!eventType.seatsPerTimeSlot
-    );
+  // Check if user is the organizer
+  const isUserOrganizer =
+    userId && originalRescheduledBooking.userId && userId === originalRescheduledBooking.userId;
 
-    // Check if user is the organizer
-    const isUserOrganizer =
-      userId && originalRescheduledBooking.userId && userId === originalRescheduledBooking.userId;
-
-    // Check minimum reschedule notice (only for non-organizers)
-    const { minimumRescheduleNotice } = originalRescheduledBooking.eventType || {};
-    if (
-      !isUserOrganizer &&
-      isWithinMinimumRescheduleNotice(originalRescheduledBooking.startTime, minimumRescheduleNotice ?? null)
-    ) {
-      throw new HttpError({
-        statusCode: 403,
-        message: "Rescheduling is not allowed within the minimum notice period before the event",
-      });
-    }
-  } catch (error) {
-    // Re-throw HttpError (including our 403 validation error)
-    if (error instanceof HttpError) {
-      throw error;
-    }
-    // For other errors (like booking not found), let the service handle it later
-    // We don't want to fail early validation for these cases
+  // Check minimum reschedule notice (only for non-organizers)
+  const { minimumRescheduleNotice } = originalRescheduledBooking.eventType || {};
+  if (
+    !isUserOrganizer &&
+    isWithinMinimumRescheduleNotice(originalRescheduledBooking.startTime, minimumRescheduleNotice ?? null)
+  ) {
+    throw new HttpError({
+      statusCode: 403,
+      message: "Rescheduling is not allowed within the minimum notice period before the event",
+    });
   }
 }
 
@@ -525,9 +552,16 @@ async function handler(
     eventTypeSlug: rawBookingData.eventTypeSlug,
   });
 
+  // Fetch reschedule context once so the rest of the handler can reuse the
+  // bookingSeat / originalRescheduledBooking results (was re-fetched twice).
+  const rescheduleContext = await fetchRescheduleContext(
+    rawBookingData.rescheduleUid,
+    eventType ? { seatsPerTimeSlot: eventType.seatsPerTimeSlot } : null
+  );
+
   // Early validation: Check reschedule restrictions if rescheduling
-  await validateRescheduleRestrictions({
-    rescheduleUid: rawBookingData.rescheduleUid,
+  validateRescheduleRestrictions({
+    rescheduleContext,
     userId: userId ?? null,
     eventType: eventType
       ? {
@@ -650,15 +684,22 @@ async function handler(
     });
   }
 
-  const bookingSeat = reqBody.rescheduleUid ? await getSeatedBooking(reqBody.rescheduleUid) : null;
-  const rescheduleUid = bookingSeat ? bookingSeat.booking.uid : reqBody.rescheduleUid;
+  const bookingSeat = rescheduleContext.bookingSeat;
+  const rescheduleUid = rescheduleContext.rescheduleUid ?? reqBody.rescheduleUid ?? undefined;
   const isNormalBookingOrFirstRecurringSlot = input.bookingData.allRecurringDates
     ? !!input.bookingData.isFirstRecurringSlot
     : true;
 
-  let originalRescheduledBooking = rescheduleUid
-    ? await getOriginalRescheduledBooking(rescheduleUid, !!eventType.seatsPerTimeSlot)
-    : null;
+  // Reuse the originalRescheduledBooking already fetched in fetchRescheduleContext
+  // above — refetching here would issue a duplicate query on every reschedule.
+  let originalRescheduledBooking = rescheduleContext.originalRescheduledBooking;
+  if (!originalRescheduledBooking && rescheduleUid) {
+    // Defensive fallback — only fires if the early fetch failed but we still have a uid.
+    originalRescheduledBooking = await getOriginalRescheduledBooking(
+      rescheduleUid,
+      !!eventType.seatsPerTimeSlot
+    );
+  }
 
   const paymentAppData = getPaymentAppData({
     ...eventType,
@@ -1216,10 +1257,6 @@ async function handler(
     },
   ];
 
-  const blacklistedGuestEmails = process.env.BLACKLISTED_GUEST_EMAILS
-    ? process.env.BLACKLISTED_GUEST_EMAILS.split(",")
-    : [];
-
   const guestEmails = (reqGuests || []).map((email) => extractBaseEmail(email).toLowerCase());
   const guestUsers = await deps.userRepository.findManyByEmailsWithEmailVerificationSettings({
     emails: guestEmails,
@@ -1231,11 +1268,16 @@ async function handler(
     emailToRequiresVerification.set(matchedBase, user.requiresBookerEmailVerification === true);
   }
 
+  // Hoist O(U) host-email lookup so we don't scan users for every guest.
+  const teamMemberEmailSet = isTeamEventType
+    ? new Set(users.map((user) => user.email).filter((email): email is string => !!email))
+    : null;
+
   const guestsRemoved: string[] = [];
   const guests = (reqGuests || []).reduce((guestArray, guest) => {
     const baseGuestEmail = extractBaseEmail(guest).toLowerCase();
 
-    if (blacklistedGuestEmails.some((e) => e.toLowerCase() === baseGuestEmail)) {
+    if (BLACKLISTED_GUEST_EMAILS_SET.has(baseGuestEmail)) {
       guestsRemoved.push(guest);
       return guestArray;
     }
@@ -1246,7 +1288,7 @@ async function handler(
     }
 
     // If it's a team event, remove the team member from guests
-    if (isTeamEventType && users.some((user) => user.email === guest)) {
+    if (teamMemberEmailSet?.has(guest)) {
       return guestArray;
     }
     guestArray.push({

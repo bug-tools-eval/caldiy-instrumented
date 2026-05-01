@@ -183,14 +183,21 @@ export class LuckyUserService implements ILuckyUserService {
       {}
     );
 
+    // Build email -> userId once so the booking pass is O(B·A) instead of O(B·U·A).
+    const userIdByEmail = new Map<string, number>();
+    for (const user of availableUsers) {
+      if (user.email) userIdByEmail.set(user.email, user.id);
+    }
     const attendeeUserIdAndAtCreatedPair = bookingsOfAvailableUsers.reduce(
       (aggregate: { [userId: number]: Date }, booking) => {
-        availableUsers.forEach((user) => {
-          if (aggregate[user.id]) return;
-          if (!booking.attendees.map((attendee) => attendee.email).includes(user.email)) return;
-          if (organizerIdAndAtCreatedPair[user.id] > booking.createdAt) return;
-          aggregate[user.id] = booking.createdAt;
-        });
+        for (const attendee of booking.attendees) {
+          if (!attendee.email) continue;
+          const userId = userIdByEmail.get(attendee.email);
+          if (userId === undefined) continue;
+          if (aggregate[userId]) continue;
+          if (organizerIdAndAtCreatedPair[userId] > booking.createdAt) continue;
+          aggregate[userId] = booking.createdAt;
+        }
         return aggregate;
       },
       {}
@@ -374,22 +381,46 @@ export class LuckyUserService implements ILuckyUserService {
       return totalCalibration;
     }, 0);
 
-    const usersWithBookingShortfalls = availableUsers.map((user) => {
-      let userWeight = user.weight ?? 100;
-      if (attributeWeights) {
-        userWeight = attributeWeights.find((userWeight) => userWeight.userId === user.id)?.weight ?? 100;
+    // Pre-build lookup maps so the per-user pass is O(U) instead of O(U·(W+B·A+H)).
+    const attributeWeightByUserId = attributeWeights
+      ? new Map(attributeWeights.map((aw) => [aw.userId, aw.weight ?? 100]))
+      : null;
+    const calibrationByUserId = new Map(allHostsWithCalibration.map((h) => [h.userId, h.calibration]));
+
+    // Group bookings by the user(s) they count for: the organizer (if a host)
+    // and any attendee whose email matches an available user.
+    const availableUserIdSet = new Set(availableUsers.map((u) => u.id));
+    const userIdByEmail = new Map<string, number>();
+    for (const u of availableUsers) {
+      if (u.email) userIdByEmail.set(u.email, u.id);
+    }
+    const userBookingCountByUserId = new Map<number, number>();
+    for (const booking of bookingsOfAvailableUsersOfInterval) {
+      const matchedUserIds = new Set<number>();
+      if (booking.userId != null && availableUserIdSet.has(booking.userId)) {
+        matchedUserIds.add(booking.userId);
       }
+      for (const attendee of booking.attendees) {
+        if (!attendee.email) continue;
+        const matchedUserId = userIdByEmail.get(attendee.email);
+        if (matchedUserId !== undefined) matchedUserIds.add(matchedUserId);
+      }
+      matchedUserIds.forEach((userId) => {
+        userBookingCountByUserId.set(userId, (userBookingCountByUserId.get(userId) ?? 0) + 1);
+      });
+    }
+
+    const usersWithBookingShortfalls = availableUsers.map((user) => {
+      const userWeight = attributeWeightByUserId
+        ? (attributeWeightByUserId.get(user.id) ?? 100)
+        : (user.weight ?? 100);
       const targetPercentage = userWeight / totalWeight;
-      const userBookings = bookingsOfAvailableUsersOfInterval.filter(
-        (booking) =>
-          booking.userId === user.id || booking.attendees.some((attendee) => attendee.email === user.email)
-      );
+      const numBookings = userBookingCountByUserId.get(user.id) ?? 0;
 
       const targetNumberOfBookings = (allBookings.length + totalCalibration) * targetPercentage;
-      const userCalibration =
-        allHostsWithCalibration.find((host) => host.userId === user.id)?.calibration ?? 0;
+      const userCalibration = calibrationByUserId.get(user.id) ?? 0;
 
-      const bookingShortfall = targetNumberOfBookings - (userBookings.length + userCalibration);
+      const bookingShortfall = targetNumberOfBookings - (numBookings + userCalibration);
 
       return {
         ...user,
@@ -397,7 +428,7 @@ export class LuckyUserService implements ILuckyUserService {
         weight: userWeight,
         targetNumberOfBookings,
         bookingShortfall,
-        numBookings: userBookings.length,
+        numBookings,
       };
     });
 
@@ -857,8 +888,11 @@ export class LuckyUserService implements ILuckyUserService {
         (booking) => booking.userId === luckyUser.id
       ).length;
       remainingAvailableUsers = remainingAvailableUsers.filter((user) => user.id !== luckyUser.id);
+      // Set membership avoids rebuilding an id array and linear-scanning it for
+      // every booking on every iteration of the lucky-user loop.
+      const remainingUserIdSet = new Set(remainingAvailableUsers.map((user) => user.id));
       bookingsOfRemainingAvailableUsersOfInterval = bookingsOfRemainingAvailableUsersOfInterval.filter(
-        (booking) => remainingAvailableUsers.map((user) => user.id).includes(booking.userId ?? 0)
+        (booking) => remainingUserIdSet.has(booking.userId ?? 0)
       );
     }
 

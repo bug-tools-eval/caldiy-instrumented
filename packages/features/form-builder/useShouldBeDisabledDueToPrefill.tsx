@@ -1,8 +1,6 @@
+import { useRouterQuery } from "@calcom/lib/hooks/useRouterQuery";
 import { useFormContext } from "react-hook-form";
 import type { z } from "zod";
-
-import { useRouterQuery } from "@calcom/lib/hooks/useRouterQuery";
-
 import type { fieldsSchema } from "./schema";
 
 type RhfForm = {
@@ -28,7 +26,9 @@ function toArray(value: string[] | string): string[] {
 }
 
 function intersected(arr1: string[], arr2: string[]): boolean {
-  return !!arr1.find((value) => arr2.find((innerValue) => innerValue?.toString() == value?.toString()));
+  // Set lookup avoids the O(N·M) nested .find() that ran on every form render.
+  const arr2Set = new Set(arr2.map((v) => v?.toString()));
+  return arr1.some((value) => arr2Set.has(value?.toString()));
 }
 
 function isEqual(searchParamValue: string | string[], formValue: string[] | string): boolean {

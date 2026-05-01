@@ -20,9 +20,15 @@ import type { TGetInputSchema } from "./get.schema";
 
 class PermissionCheckService {
   constructor(_prisma?: unknown) {}
-  async checkPermission(..._args: unknown[]) { return true; }
-  async hasPermission(..._args: unknown[]) { return true; }
-  async getTeamIdsWithPermission(..._args: unknown[]): Promise<number[]> { return []; }
+  async checkPermission(..._args: unknown[]) {
+    return true;
+  }
+  async hasPermission(..._args: unknown[]) {
+    return true;
+  }
+  async getTeamIdsWithPermission(..._args: unknown[]): Promise<number[]> {
+    return [];
+  }
 }
 
 type GetOptions = {
@@ -437,18 +443,19 @@ export async function getBookings({
     .offset(skip)
     .compile();
 
-  const bookingsFromUnion = (await kysely.executeQuery(getBookingsUnionCompiled)).rows;
-
+  // The union (paginated id list) and the count are independent — running them
+  // in parallel saves one DB round-trip on every /bookings page load.
   log.debug(`Get bookings for user ${user.id} SQL:`, getBookingsUnionCompiled.sql);
 
-  const totalCount = Number(
-    (
-      await kysely
-        .selectFrom(queryUnion.as("union_subquery"))
-        .select(({ fn }) => fn.count("union_subquery.id").distinct().as("bookingCount"))
-        .executeTakeFirst()
-    )?.bookingCount ?? 0
-  );
+  const [bookingsFromUnionResult, countResult] = await Promise.all([
+    kysely.executeQuery(getBookingsUnionCompiled),
+    kysely
+      .selectFrom(queryUnion.as("union_subquery"))
+      .select(({ fn }) => fn.count("union_subquery.id").distinct().as("bookingCount"))
+      .executeTakeFirst(),
+  ]);
+  const bookingsFromUnion = bookingsFromUnionResult.rows;
+  const totalCount = Number(countResult?.bookingCount ?? 0);
 
   const plainBookings = !(bookingsFromUnion?.length === 0)
     ? await kysely
@@ -744,48 +751,52 @@ export async function getBookings({
     });
   };
 
-  const bookings = await Promise.all(
-    plainBookings.map(async (booking) => {
-      // If seats are enabled, the event is not set to show attendees, and the current user is not the host, filter out attendees who are not the current user
-      if (
-        booking.seatsReferences.length &&
-        !booking.eventType?.seatsShowAttendees &&
-        !checkIfUserIsHost(user.id, booking)
-      ) {
-        booking.attendees = booking.attendees.filter((attendee) => attendee.email === user.email);
-      }
-
-      let rescheduler = null;
-      if (booking.fromReschedule) {
-        const rescheduledBooking = await prisma.booking.findUnique({
-          where: {
-            uid: booking.fromReschedule,
-          },
-          select: {
-            rescheduledBy: true,
-          },
-        });
-        if (rescheduledBooking) {
-          rescheduler = rescheduledBooking.rescheduledBy;
-        }
-      }
-
-      return {
-        ...booking,
-        rescheduler,
-        eventType: {
-          ...booking.eventType,
-          recurringEvent: parseRecurringEvent(booking.eventType?.recurringEvent),
-          eventTypeColor: parseEventTypeColor(booking.eventType?.eventTypeColor),
-          price: booking.eventType?.price || 0,
-          currency: booking.eventType?.currency || "usd",
-          metadata: EventTypeMetaDataSchema.parse(booking.eventType?.metadata || {}),
-        },
-        startTime: booking.startTime.toISOString(),
-        endTime: booking.endTime.toISOString(),
-      };
-    })
+  // Batch the lookup of rescheduler info into a single query rather than firing
+  // one findUnique per rescheduled booking (textbook N+1 on the /bookings page).
+  const rescheduledFromUids = Array.from(
+    new Set(plainBookings.map((b) => b.fromReschedule).filter((uid): uid is string => !!uid))
   );
+  const rescheduledByByUid =
+    rescheduledFromUids.length > 0
+      ? new Map(
+          (
+            await prisma.booking.findMany({
+              where: { uid: { in: rescheduledFromUids } },
+              select: { uid: true, rescheduledBy: true },
+            })
+          ).map((b) => [b.uid, b.rescheduledBy])
+        )
+      : new Map<string, string | null>();
+
+  const bookings = plainBookings.map((booking) => {
+    // If seats are enabled, the event is not set to show attendees, and the current user is not the host, filter out attendees who are not the current user
+    if (
+      booking.seatsReferences.length &&
+      !booking.eventType?.seatsShowAttendees &&
+      !checkIfUserIsHost(user.id, booking)
+    ) {
+      booking.attendees = booking.attendees.filter((attendee) => attendee.email === user.email);
+    }
+
+    const rescheduler = booking.fromReschedule
+      ? (rescheduledByByUid.get(booking.fromReschedule) ?? null)
+      : null;
+
+    return {
+      ...booking,
+      rescheduler,
+      eventType: {
+        ...booking.eventType,
+        recurringEvent: parseRecurringEvent(booking.eventType?.recurringEvent),
+        eventTypeColor: parseEventTypeColor(booking.eventType?.eventTypeColor),
+        price: booking.eventType?.price || 0,
+        currency: booking.eventType?.currency || "usd",
+        metadata: EventTypeMetaDataSchema.parse(booking.eventType?.metadata || {}),
+      },
+      startTime: booking.startTime.toISOString(),
+      endTime: booking.endTime.toISOString(),
+    };
+  });
 
   // Enrich attendees with user data
   const enrichedBookings = await enrichAttendeesWithUserData(bookings, kysely);

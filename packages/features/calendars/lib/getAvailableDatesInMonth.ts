@@ -20,6 +20,7 @@ export function getAvailableDatesInMonth({
     browsingDate.getMonth(),
     daysInMonth(browsingDate)
   );
+  const includedDatesSet = includedDates ? new Set(includedDates) : null;
   for (
     let date = browsingDate > minDate ? browsingDate : minDate;
     // Check if date is before the last date of the month
@@ -27,11 +28,12 @@ export function getAvailableDatesInMonth({
     date < lastDateOfMonth || dayjs(date).isSame(lastDateOfMonth, "day");
     date = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1)
   ) {
+    const dateKey = yyyymmdd(date);
     // intersect included dates
-    if (includedDates && !includedDates.includes(yyyymmdd(date))) {
+    if (includedDatesSet && !includedDatesSet.has(dateKey)) {
       continue;
     }
-    dates.push(yyyymmdd(date));
+    dates.push(dateKey);
   }
   return dates;
 }

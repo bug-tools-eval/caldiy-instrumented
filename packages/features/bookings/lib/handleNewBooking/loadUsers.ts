@@ -12,7 +12,10 @@ import { Prisma } from "@calcom/prisma/client";
 import { credentialForCalendarServiceSelect } from "@calcom/prisma/selects/credential";
 import type { NewBookingEventType } from "./getEventTypesFromDB";
 
-const getOrgDomainConfig = (..._args: unknown[]) => ({ currentOrgDomain: null as string | null, isValidOrgDomain: false });
+const getOrgDomainConfig = (..._args: unknown[]) => ({
+  currentOrgDomain: null as string | null,
+  isValidOrgDomain: false,
+});
 
 const log = logger.getSubLogger({ prefix: ["[loadUsers]:handleNewBooking "] });
 
@@ -129,20 +132,21 @@ export const findUsersByUsername = async ({
     orgSlug,
     usernameList,
   });
-  return (
-    await prisma.user.findMany({
-      where,
-      select: {
-        ...userSelect,
-        credentials: {
-          select: credentialForCalendarServiceSelect,
-        },
-        metadata: true,
+  const fetchedUsers = await prisma.user.findMany({
+    where,
+    select: {
+      ...userSelect,
+      credentials: {
+        select: credentialForCalendarServiceSelect,
       },
-    })
-  ).map((_user) => {
+      metadata: true,
+    },
+  });
+  // Index profiles by userId once instead of scanning the array per user.
+  const profileByUserId = new Map((profiles ?? []).map((profile) => [profile.user.id, profile] as const));
+  return fetchedUsers.map((_user) => {
     const user = withSelectedCalendars(_user);
-    const profile = profiles?.find((profile) => profile.user.id === user.id) ?? null;
+    const profile = profileByUserId.get(user.id) ?? null;
     return {
       ...user,
       organizationId: profile?.organizationId ?? null,
