@@ -229,6 +229,9 @@ export const getEventTypesByViewer = async (user: User, filters?: Filters) => {
     teamId: membership.team.id,
     membershipRole: membership.role,
   }));
+  const teamMembershipRoleByTeamId = new Map(
+    teamMemberships.map((teamM) => [teamM.teamId, teamM.membershipRole])
+  );
 
   const filterByTeamIds = async (eventType: Awaited<ReturnType<typeof mapEventType>>) => {
     if (!filters || !hasFilter(filters)) {
@@ -261,9 +264,10 @@ export const getEventTypesByViewer = async (user: User, filters?: Filters) => {
           }
         })
         .map(async (membership) => {
-          const orgMembership = teamMemberships.find(
-            (teamM) => teamM.teamId === membership.team.parentId
-          )?.membershipRole;
+          const orgMembership =
+            membership.team.parentId != null
+              ? teamMembershipRoleByTeamId.get(membership.team.parentId)
+              : undefined;
 
           const team = {
             ...membership.team,

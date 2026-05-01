@@ -185,9 +185,10 @@ export class LuckyUserService implements ILuckyUserService {
 
     const attendeeUserIdAndAtCreatedPair = bookingsOfAvailableUsers.reduce(
       (aggregate: { [userId: number]: Date }, booking) => {
+        const attendeeEmails = new Set(booking.attendees.map((attendee) => attendee.email));
         availableUsers.forEach((user) => {
           if (aggregate[user.id]) return;
-          if (!booking.attendees.map((attendee) => attendee.email).includes(user.email)) return;
+          if (!attendeeEmails.has(user.email)) return;
           if (organizerIdAndAtCreatedPair[user.id] > booking.createdAt) return;
           aggregate[user.id] = booking.createdAt;
         });
