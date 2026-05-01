@@ -91,8 +91,14 @@ async function getTeamMembers({
 }
 
 type Member = Awaited<ReturnType<typeof getTeamMembers>>[number];
+type MemberSchedule = { availability: Prisma.AvailabilityGetPayload<true>[]; timeZone: string | null };
 
-async function buildMember(member: Member, dateFrom: Dayjs, dateTo: Dayjs) {
+function buildMember(
+  member: Member,
+  dateFrom: Dayjs,
+  dateTo: Dayjs,
+  scheduleById: Map<number, MemberSchedule>
+) {
   if (!member.user.defaultScheduleId) {
     return {
       id: member.user.id,
@@ -107,10 +113,7 @@ async function buildMember(member: Member, dateFrom: Dayjs, dateTo: Dayjs) {
     };
   }
 
-  const schedule = await prisma.schedule.findUnique({
-    where: { id: member.user.defaultScheduleId },
-    select: { availability: true, timeZone: true },
-  });
+  const schedule = scheduleById.get(member.user.defaultScheduleId);
   const timeZone = schedule?.timeZone || member.user.timeZone;
 
   const { dateRanges } = buildDateRanges({
@@ -248,9 +251,26 @@ export const listTeamAvailabilityHandler = async ({ ctx, input }: GetOptions) =>
   const dateFrom = dayjs(input.startDate).tz(input.loggedInUsersTz).subtract(1, "day");
   const dateTo = dayjs(input.endDate).tz(input.loggedInUsersTz).add(1, "day");
 
-  const buildMembers = teamMembers?.map((member) => buildMember(member, dateFrom, dateTo));
+  // Batch-fetch every member's default schedule in one query rather than
+  // letting each buildMember run its own findUnique.
+  const scheduleIds = Array.from(
+    new Set(
+      (teamMembers ?? [])
+        .map((member) => member.user.defaultScheduleId)
+        .filter((id): id is number => typeof id === "number")
+    )
+  );
+  const schedules = scheduleIds.length
+    ? await prisma.schedule.findMany({
+        where: { id: { in: scheduleIds } },
+        select: { id: true, availability: true, timeZone: true },
+      })
+    : [];
+  const scheduleById = new Map<number, MemberSchedule>(
+    schedules.map((schedule) => [schedule.id, { availability: schedule.availability, timeZone: schedule.timeZone }])
+  );
 
-  const members = await Promise.all(buildMembers);
+  const members = (teamMembers ?? []).map((member) => buildMember(member, dateFrom, dateTo, scheduleById));
 
   let belongsToTeam = true;
 

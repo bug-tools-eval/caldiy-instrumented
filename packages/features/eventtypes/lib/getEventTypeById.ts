@@ -77,36 +77,36 @@ export const getEventTypeById = async ({
   const apps = newMetadata?.apps || {};
   const eventTypeWithParsedMetadata = { ...rawEventType, metadata: newMetadata };
   const userRepo = new UserRepository(prisma);
-  const eventTeamMembershipsWithUserProfile = [];
-  for (const eventTeamMembership of rawEventType.team?.members || []) {
-    eventTeamMembershipsWithUserProfile.push({
-      ...eventTeamMembership,
-      user: await userRepo.enrichUserWithItsProfile({
-        user: eventTeamMembership.user,
-      }),
-    });
-  }
-
-  const childrenWithUserProfile = [];
-  for (const child of rawEventType.children || []) {
-    childrenWithUserProfile.push({
-      ...child,
-      owner: child.owner
-        ? await userRepo.enrichUserWithItsProfile({
-            user: child.owner,
+  // Each enrichUserWithItsProfile call hits the DB independently; run them
+  // in parallel rather than serially to avoid N+1 latency for team events.
+  const [eventTeamMembershipsWithUserProfile, childrenWithUserProfile, eventTypeUsersWithUserProfile] =
+    await Promise.all([
+      Promise.all(
+        (rawEventType.team?.members || []).map(async (eventTeamMembership) => ({
+          ...eventTeamMembership,
+          user: await userRepo.enrichUserWithItsProfile({
+            user: eventTeamMembership.user,
+          }),
+        }))
+      ),
+      Promise.all(
+        (rawEventType.children || []).map(async (child) => ({
+          ...child,
+          owner: child.owner
+            ? await userRepo.enrichUserWithItsProfile({
+                user: child.owner,
+              })
+            : null,
+        }))
+      ),
+      Promise.all(
+        rawEventType.users.map((eventTypeUser) =>
+          userRepo.enrichUserWithItsProfile({
+            user: eventTypeUser,
           })
-        : null,
-    });
-  }
-
-  const eventTypeUsersWithUserProfile = [];
-  for (const eventTypeUser of rawEventType.users) {
-    eventTypeUsersWithUserProfile.push(
-      await userRepo.enrichUserWithItsProfile({
-        user: eventTypeUser,
-      })
-    );
-  }
+        )
+      ),
+    ]);
 
   newMetadata.apps = {
     ...apps,
