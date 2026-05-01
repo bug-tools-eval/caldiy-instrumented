@@ -1,15 +1,17 @@
+import type { App, Prisma } from "@calcom/prisma/client";
+import { Injectable } from "@nestjs/common";
 import { PrismaReadService } from "@/modules/prisma/prisma-read.service";
 import { PrismaWriteService } from "@/modules/prisma/prisma-write.service";
-import { Injectable } from "@nestjs/common";
-
-import type { App, Prisma } from "@calcom/prisma/client";
 
 @Injectable()
 export class AppsRepository {
-  constructor(private readonly dbRead: PrismaReadService, private readonly dbWrite: PrismaWriteService) {}
+  constructor(
+    private readonly dbRead: PrismaReadService,
+    private readonly dbWrite: PrismaWriteService
+  ) {}
 
-  async getAppBySlug(slug: string): Promise<App | null> {
-    return await this.dbRead.prisma.app.findUnique({ where: { slug } });
+  async getAppBySlug(slug: string): Promise<Pick<App, "keys"> | null> {
+    return await this.dbRead.prisma.app.findUnique({ where: { slug }, select: { keys: true } });
   }
 
   async createAppCredential(type: string, key: Prisma.InputJsonValue, userId: number, appId: string) {
