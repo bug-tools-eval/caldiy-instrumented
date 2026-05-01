@@ -93,14 +93,16 @@ export default class Sendgrid {
     });
     allFields.custom_fields = allFields.custom_fields ?? [];
     this.log.debug("sync:sendgrid:getCustomFieldsIds:allFields", allFields);
-    const customFieldsNames = allFields.custom_fields.map((fie) => fie.name);
-    this.log.debug("sync:sendgrid:getCustomFieldsIds:customFieldsNames", customFieldsNames);
-    const customFieldsExist = customFields.map((cusFie) => customFieldsNames.includes(cusFie[0]));
-    this.log.debug("sync:sendgrid:getCustomFieldsIds:customFieldsExist", customFieldsExist);
+    const fieldByName = new Map<string, SendgridFieldDefinitions["custom_fields"][number]>();
+    allFields.custom_fields.forEach((field) => {
+      fieldByName.set(field.name, field);
+    });
+    this.log.debug("sync:sendgrid:getCustomFieldsIds:customFieldsNames", Array.from(fieldByName.keys()));
     return await Promise.all(
-      customFieldsExist.map(async (exist, idx) => {
-        if (!exist) {
-          const [name, field_type] = customFields[idx];
+      customFields.map(async (cusFie) => {
+        const existingField = fieldByName.get(cusFie[0]);
+        if (!existingField) {
+          const [name, field_type] = cusFie;
           const created = await this.sendgridRequest<SendgridCustomField>({
             url: `/v3/marketing/field_definitions`,
             method: "POST",
@@ -112,16 +114,11 @@ export default class Sendgrid {
           this.log.debug("sync:sendgrid:getCustomFieldsIds:customField:created", created);
           return created.id;
         } else {
-          const index = customFieldsNames.findIndex((val) => val === customFields[idx][0]);
-          if (index >= 0) {
-            this.log.debug(
-              "sync:sendgrid:getCustomFieldsIds:customField:existed",
-              allFields.custom_fields[index].id
-            );
-            return allFields.custom_fields[index].id;
-          } else {
-            throw Error("Couldn't find the field index");
-          }
+          this.log.debug(
+            "sync:sendgrid:getCustomFieldsIds:customField:existed",
+            existingField.id
+          );
+          return existingField.id;
         }
       })
     );
