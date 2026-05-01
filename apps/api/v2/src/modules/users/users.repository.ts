@@ -1,20 +1,42 @@
+import { CreationSource } from "@calcom/platform-libraries";
+import type { Prisma, Profile, Team, User } from "@calcom/prisma/client";
+import { Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaReadService } from "@/modules/prisma/prisma-read.service";
 import { PrismaWriteService } from "@/modules/prisma/prisma-write.service";
 import { CreateManagedUserInput } from "@/modules/users/inputs/create-managed-user.input";
 import { UpdateManagedUserInput } from "@/modules/users/inputs/update-managed-user.input";
-import { Injectable, NotFoundException } from "@nestjs/common";
-
-import { CreationSource } from "@calcom/platform-libraries";
-import type { Profile, User, Team, Prisma } from "@calcom/prisma/client";
 
 export type UserWithProfile = User & {
   movedToProfile?: (Profile & { organization: Pick<Team, "isPlatform" | "id" | "slug" | "name"> }) | null;
   profiles?: (Profile & { organization: Pick<Team, "isPlatform" | "id" | "slug" | "name"> })[];
 };
 
+const managedUserOutputSelect = {
+  id: true,
+  email: true,
+  username: true,
+  name: true,
+  bio: true,
+  timeZone: true,
+  weekStart: true,
+  createdDate: true,
+  timeFormat: true,
+  defaultScheduleId: true,
+  locale: true,
+  avatarUrl: true,
+  metadata: true,
+} satisfies Prisma.UserSelect;
+
+export type ManagedUserOutputFields = Prisma.UserGetPayload<{
+  select: typeof managedUserOutputSelect;
+}>;
+
 @Injectable()
 export class UsersRepository {
-  constructor(private readonly dbRead: PrismaReadService, private readonly dbWrite: PrismaWriteService) {}
+  constructor(
+    private readonly dbRead: PrismaReadService,
+    private readonly dbWrite: PrismaWriteService
+  ) {}
 
   async create(
     user: CreateManagedUserInput,
@@ -50,6 +72,54 @@ export class UsersRepository {
     return this.dbRead.prisma.user.findUnique({
       where: {
         id: userId,
+      },
+    });
+  }
+
+  async findIdAndUuidById(userId: number): Promise<{ id: number; uuid: string } | null> {
+    return this.dbRead.prisma.user.findUnique({
+      where: {
+        id: userId,
+      },
+      select: {
+        id: true,
+        uuid: true,
+      },
+    });
+  }
+
+  async findOrganizationIdById(userId: number): Promise<{ organizationId: number | null } | null> {
+    return this.dbRead.prisma.user.findUnique({
+      where: {
+        id: userId,
+      },
+      select: {
+        organizationId: true,
+      },
+    });
+  }
+
+  async findScheduleDefaultsById(
+    userId: number
+  ): Promise<Pick<User, "defaultScheduleId" | "timeZone"> | null> {
+    return this.dbRead.prisma.user.findUnique({
+      where: {
+        id: userId,
+      },
+      select: {
+        defaultScheduleId: true,
+        timeZone: true,
+      },
+    });
+  }
+
+  async findMetadataById(userId: number): Promise<Pick<User, "metadata"> | null> {
+    return this.dbRead.prisma.user.findUnique({
+      where: {
+        id: userId,
+      },
+      select: {
+        metadata: true,
       },
     });
   }
@@ -128,6 +198,24 @@ export class UsersRepository {
     });
   }
 
+  async findHostDisplayByIds(
+    userIds: number[]
+  ): Promise<Pick<User, "id" | "name" | "username" | "avatarUrl">[]> {
+    return this.dbRead.prisma.user.findMany({
+      where: {
+        id: {
+          in: userIds,
+        },
+      },
+      select: {
+        id: true,
+        name: true,
+        username: true,
+        avatarUrl: true,
+      },
+    });
+  }
+
   async findByIdWithCalendars(userId: number) {
     return this.dbRead.prisma.user.findUnique({
       where: {
@@ -140,12 +228,63 @@ export class UsersRepository {
     });
   }
 
+  async findStripeCustomerFieldsById(
+    userId: number
+  ): Promise<Pick<User, "email" | "name" | "metadata"> | null> {
+    return this.dbRead.prisma.user.findUnique({
+      where: {
+        id: userId,
+      },
+      select: {
+        email: true,
+        name: true,
+        metadata: true,
+      },
+    });
+  }
+
   async findByEmail(email: string) {
     return this.dbRead.prisma.user.findUnique({
       where: {
         email,
       },
     });
+  }
+
+  async findIdByEmail(email: string): Promise<{ id: number } | null> {
+    return this.dbRead.prisma.user.findUnique({
+      where: {
+        email,
+      },
+      select: {
+        id: true,
+      },
+    });
+  }
+
+  async findIdAndUuidByEmail(email: string): Promise<{ id: number; uuid: string } | null> {
+    return this.dbRead.prisma.user.findUnique({
+      where: {
+        email,
+      },
+      select: {
+        id: true,
+        uuid: true,
+      },
+    });
+  }
+
+  async existsByEmail(email: string): Promise<boolean> {
+    const user = await this.dbRead.prisma.user.findUnique({
+      where: {
+        email,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    return !!user;
   }
 
   async findByEmailWithProfile(email: string) {
@@ -178,8 +317,6 @@ export class UsersRepository {
     });
   }
 
-
-
   async findByUsername(username: string, orgSlug?: string, orgId?: number) {
     return this.dbRead.prisma.user.findFirst({
       where:
@@ -198,7 +335,11 @@ export class UsersRepository {
     });
   }
 
-  async findManagedUsersByOAuthClientId(oauthClientId: string, cursor: number, limit: number) {
+  async findManagedUsersByOAuthClientId(
+    oauthClientId: string,
+    cursor: number,
+    limit: number
+  ): Promise<ManagedUserOutputFields[]> {
     return this.dbRead.prisma.user.findMany({
       where: {
         platformOAuthClients: {
@@ -210,6 +351,7 @@ export class UsersRepository {
       },
       take: limit,
       skip: cursor,
+      select: managedUserOutputSelect,
     });
   }
 
@@ -218,7 +360,7 @@ export class UsersRepository {
     cursor: number,
     limit: number,
     oAuthEmails?: string[]
-  ) {
+  ): Promise<ManagedUserOutputFields[]> {
     return this.dbRead.prisma.user.findMany({
       where: {
         platformOAuthClients: {
@@ -237,6 +379,7 @@ export class UsersRepository {
       },
       take: limit,
       skip: cursor,
+      select: managedUserOutputSelect,
     });
   }
 
@@ -279,11 +422,12 @@ export class UsersRepository {
   }
 
   async getUserScheduleDefaultId(userId: number) {
-    const user = await this.findById(userId);
+    const user = await this.dbRead.prisma.user.findUnique({
+      where: { id: userId },
+      select: { defaultScheduleId: true },
+    });
 
-    if (!user?.defaultScheduleId) return null;
-
-    return user?.defaultScheduleId;
+    return user?.defaultScheduleId ?? null;
   }
 
   async getUsersScheduleDefaultIds(userIds: number[]): Promise<Map<number, number | null>> {
@@ -307,7 +451,10 @@ export class UsersRepository {
   }
 
   async setDefaultConferencingApp(userId: number, appSlug?: string, appLink?: string) {
-    const user = await this.findById(userId);
+    const user = await this.dbRead.prisma.user.findUnique({
+      where: { id: userId },
+      select: { metadata: true },
+    });
 
     if (!user) {
       throw new NotFoundException("user not found");

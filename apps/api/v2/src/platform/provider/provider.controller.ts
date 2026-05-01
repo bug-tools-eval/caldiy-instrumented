@@ -11,14 +11,14 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { ApiExcludeController, ApiHeader, ApiOperation, ApiTags as DocsTags } from "@nestjs/swagger";
-import { ProviderVerifyAccessTokenOutput } from "@/platform/provider/outputs/verify-access-token.output";
-import { ProviderVerifyClientOutput } from "@/platform/provider/outputs/verify-client.output";
 import { API_VERSIONS_VALUES } from "@/lib/api-versions";
 import { ACCESS_TOKEN_HEADER } from "@/lib/docs/headers";
 import { GetUser } from "@/modules/auth/decorators/get-user/get-user.decorator";
 import { ApiAuthGuard } from "@/modules/auth/guards/api-auth/api-auth.guard";
 import { OAuthClientRepository } from "@/modules/oauth-clients/oauth-client.repository";
-import { UserWithProfile } from "@/modules/users/users.repository";
+import type { UserWithProfile } from "@/modules/users/users.repository";
+import { ProviderVerifyAccessTokenOutput } from "@/platform/provider/outputs/verify-access-token.output";
+import { ProviderVerifyClientOutput } from "@/platform/provider/outputs/verify-client.output";
 
 @Controller({
   path: "/v2/provider",
@@ -38,7 +38,7 @@ export class CalProviderController {
     if (!clientId) {
       throw new NotFoundException();
     }
-    const oAuthClient = await this.oauthClientRepository.getOAuthClient(clientId);
+    const oAuthClient = await this.oauthClientRepository.getOAuthClientProviderFields(clientId);
 
     if (!oAuthClient) throw new UnauthorizedException();
 

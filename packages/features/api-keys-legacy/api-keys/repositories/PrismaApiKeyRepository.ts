@@ -1,8 +1,14 @@
-import { v4 as uuidv4 } from "uuid";
-
+import process from "node:process";
 import type { PrismaClient } from "@calcom/prisma";
-
+import type { Prisma } from "@calcom/prisma/client";
+import { v4 as uuidv4 } from "uuid";
 import { generateUniqueAPIKey as generateHashedApiKey } from "../lib/apiKeys";
+
+export const apiKeyListItemSelect = {
+  id: true,
+  note: true,
+  expiresAt: true,
+} satisfies Prisma.ApiKeySelect;
 
 export class PrismaApiKeyRepository {
   constructor(private prismaClient: PrismaClient) {}
@@ -47,6 +53,7 @@ export class PrismaApiKeyRepository {
         ],
       },
       orderBy: { createdAt: "desc" },
+      select: apiKeyListItemSelect,
     });
     return apiKeys.filter((apiKey) => {
       if (apiKey.note?.startsWith("Cal.ai Phone API Key")) {

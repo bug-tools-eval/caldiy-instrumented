@@ -1,15 +1,16 @@
+import type { UpdateScheduleResponse } from "@calcom/platform-libraries/schedules";
+import {
+  getScheduleByEventSlugHandler,
+  ScheduleRepository,
+  updateSchedule,
+} from "@calcom/platform-libraries/schedules";
+import type { UpdateAtomScheduleDto } from "@calcom/platform-types";
+import type { PrismaClient } from "@calcom/prisma";
+import { Injectable, Logger } from "@nestjs/common";
 import { PrismaReadService } from "@/modules/prisma/prisma-read.service";
 import { PrismaWriteService } from "@/modules/prisma/prisma-write.service";
+import type { UserWithProfile } from "@/modules/users/users.repository";
 import { UsersRepository } from "@/modules/users/users.repository";
-import { UserWithProfile } from "@/modules/users/users.repository";
-import { Logger } from "@nestjs/common";
-import { Injectable } from "@nestjs/common";
-
-import { ScheduleRepository, UpdateScheduleResponse } from "@calcom/platform-libraries/schedules";
-import { getScheduleByEventSlugHandler } from "@calcom/platform-libraries/schedules";
-import { updateSchedule } from "@calcom/platform-libraries/schedules";
-import { UpdateAtomScheduleDto } from "@calcom/platform-types";
-import type { PrismaClient } from "@calcom/prisma";
 
 @Injectable()
 export class SchedulesAtomsService {
@@ -32,16 +33,16 @@ export class SchedulesAtomsService {
     scheduleId?: number;
     isManagedEventType?: boolean;
   }) {
-    const user = await this.usersRepository.findById(userId);
+    const defaultScheduleId = await this.usersRepository.getUserScheduleDefaultId(userId);
 
-    if (!user?.defaultScheduleId) return null;
+    if (!defaultScheduleId) return null;
     const scheduleRepo = new ScheduleRepository(this.dbWrite.prisma as unknown as PrismaClient);
     return await scheduleRepo.findDetailedScheduleById({
-      scheduleId: scheduleId ?? user.defaultScheduleId,
+      scheduleId: scheduleId ?? defaultScheduleId,
       isManagedEventType,
       userId,
       timeZone,
-      defaultScheduleId: user.defaultScheduleId,
+      defaultScheduleId,
     });
   }
 

@@ -2,13 +2,13 @@ import { ErrorCode, ErrorWithCode } from "@calcom/platform-libraries/errors";
 import type { AddAttendeeInput_2024_08_13 } from "@calcom/platform-types";
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { plainToClass } from "class-transformer";
+import { BookingAttendeesService } from "@/lib/services/booking-attendees.service";
+import type { ApiAuthGuardUser } from "@/modules/auth/strategies/api-auth/api-auth.strategy";
 import { BookingAttendeeOutput_2024_08_13 } from "@/platform/bookings/2024-08-13/outputs/add-attendee.output";
 import { BookingAttendeeWithId_2024_08_13 } from "@/platform/bookings/2024-08-13/outputs/get-booking-attendees.output";
 import { RemovedAttendeeOutput_2024_08_13 } from "@/platform/bookings/2024-08-13/outputs/remove-attendee.output";
 import { BookingsRepository_2024_08_13 } from "@/platform/bookings/2024-08-13/repositories/bookings.repository";
 import { PlatformBookingsService } from "@/platform/bookings/shared/platform-bookings.service";
-import { BookingAttendeesService } from "@/lib/services/booking-attendees.service";
-import type { ApiAuthGuardUser } from "@/modules/auth/strategies/api-auth/api-auth.strategy";
 
 @Injectable()
 export class BookingAttendeesService_2024_08_13 {
@@ -73,7 +73,7 @@ export class BookingAttendeesService_2024_08_13 {
     input: AddAttendeeInput_2024_08_13,
     user: ApiAuthGuardUser
   ): Promise<BookingAttendeeOutput_2024_08_13> {
-    const booking = await this.bookingsRepository.getByUidWithEventType(bookingUid);
+    const booking = await this.bookingsRepository.getIdAndEventTypeIdByUid(bookingUid);
     if (!booking) {
       throw new NotFoundException(`Booking with uid ${bookingUid} not found`);
     }
@@ -124,7 +124,7 @@ export class BookingAttendeesService_2024_08_13 {
     attendeeId: number,
     user: ApiAuthGuardUser
   ): Promise<RemovedAttendeeOutput_2024_08_13> {
-    const booking = await this.bookingsRepository.getByUidWithAttendeesAndUserAndEvent(bookingUid);
+    const booking = await this.bookingsRepository.getIdAndEventTypeIdByUid(bookingUid);
     if (!booking) {
       throw new NotFoundException(`Booking with uid ${bookingUid} not found`);
     }

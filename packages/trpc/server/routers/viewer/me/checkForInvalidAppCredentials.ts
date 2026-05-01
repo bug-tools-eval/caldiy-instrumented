@@ -6,9 +6,15 @@ import type { TrpcSessionUser } from "@calcom/trpc/server/types";
 
 class PermissionCheckService {
   constructor(_prisma?: unknown) {}
-  async checkPermission(..._args: unknown[]) { return true; }
-  async hasPermission(..._args: unknown[]) { return true; }
-  async getTeamIdsWithPermission(..._args: unknown[]): Promise<number[]> { return []; }
+  async checkPermission(..._args: unknown[]) {
+    return true;
+  }
+  async hasPermission(..._args: unknown[]) {
+    return true;
+  }
+  async getTeamIdsWithPermission(..._args: unknown[]): Promise<number[]> {
+    return [];
+  }
 }
 
 type checkInvalidAppCredentialsOptions = {
@@ -28,6 +34,7 @@ export const checkInvalidAppCredentials = async ({ ctx }: checkInvalidAppCredent
   });
 
   const apps = await prisma.credential.findMany({
+    distinct: ["appId"],
     where: {
       OR: [{ userId }, { teamId: { in: userTeamIds } }],
       invalid: true,
@@ -37,15 +44,13 @@ export const checkInvalidAppCredentials = async ({ ctx }: checkInvalidAppCredent
     },
   });
 
-  const appNamesAndSlugs: InvalidAppCredentialBannerProps[] = [];
-  for (const app of apps) {
-    if (app.appId) {
-      const appId = app.appId;
+  const appIds = apps.flatMap((app) => (app.appId ? [app.appId] : []));
+
+  return Promise.all(
+    appIds.map(async (appId): Promise<InvalidAppCredentialBannerProps> => {
       const appMeta = await getAppFromSlug(appId);
       const name = appMeta ? appMeta.name : appId;
-      appNamesAndSlugs.push({ slug: appId, name });
-    }
-  }
-
-  return appNamesAndSlugs;
+      return { slug: appId, name };
+    })
+  );
 };

@@ -1,13 +1,10 @@
+import { APPLE_CALENDAR_ID, APPLE_CALENDAR_TYPE, SUCCESS_STATUS } from "@calcom/platform-constants";
+import { symmetricDecrypt, symmetricEncrypt } from "@calcom/platform-libraries";
+import { BuildCalendarService } from "@calcom/platform-libraries/app-store";
+import { BadRequestException, Injectable, UnauthorizedException } from "@nestjs/common";
+import { CredentialsRepository } from "@/modules/credentials/credentials.repository";
 import { CredentialSyncCalendarApp } from "@/platform/calendars/calendars.interface";
 import { CalendarsService } from "@/platform/calendars/services/calendars.service";
-import { CredentialsRepository } from "@/modules/credentials/credentials.repository";
-import { BadRequestException, UnauthorizedException } from "@nestjs/common";
-import { Injectable } from "@nestjs/common";
-
-import { SUCCESS_STATUS, APPLE_CALENDAR_TYPE, APPLE_CALENDAR_ID } from "@calcom/platform-constants";
-import { symmetricEncrypt, symmetricDecrypt } from "@calcom/platform-libraries";
-import { BuildCalendarService } from "@calcom/platform-libraries/app-store";
-import type { Credential } from "@calcom/prisma/client";
 
 @Injectable()
 export class AppleCalendarService implements CredentialSyncCalendarApp {
@@ -72,21 +69,21 @@ export class AppleCalendarService implements CredentialSyncCalendarApp {
     let hasMatchingUsernameAndPassword = false;
 
     if (existingAppleCalendarCredentials.length > 0) {
-      const hasCalendarWithGivenCredentials = existingAppleCalendarCredentials.find(
-        (calendarCredential: Credential) => {
-          const decryptedKey = JSON.parse(
-            symmetricDecrypt(calendarCredential.key as string, process.env.CALENDSO_ENCRYPTION_KEY || "")
-          );
+      const hasCalendarWithGivenCredentials = existingAppleCalendarCredentials.find((calendarCredential) => {
+        const decryptedKey = JSON.parse(
+          symmetricDecrypt(calendarCredential.key as string, process.env.CALENDSO_ENCRYPTION_KEY || "")
+        );
 
-          if (decryptedKey.username === username) {
-            if (decryptedKey.password === password) {
-              hasMatchingUsernameAndPassword = true;
-            }
-
-            return true;
+        if (decryptedKey.username === username) {
+          if (decryptedKey.password === password) {
+            hasMatchingUsernameAndPassword = true;
           }
+
+          return true;
         }
-      );
+
+        return false;
+      });
 
       if (!!hasCalendarWithGivenCredentials && hasMatchingUsernameAndPassword) {
         return {

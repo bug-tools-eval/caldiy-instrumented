@@ -16,6 +16,11 @@ export async function joinAnyChildTeamOnOrgInvite({
     where: {
       id: userId,
     },
+    select: {
+      id: true,
+      username: true,
+      email: true,
+    },
   });
   if (!user) {
     throw new Error("User not found");
@@ -77,5 +82,4 @@ export async function joinAnyChildTeamOnOrgInvite({
       },
     }),
   ]);
-
 }

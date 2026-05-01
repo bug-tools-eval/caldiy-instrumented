@@ -11,9 +11,9 @@ import type {
   User,
 } from "@calcom/prisma/client";
 import { Injectable } from "@nestjs/common";
-import { OutputEventTypesService_2024_06_14 } from "@/platform/event-types/event-types_2024_06_14/services/output-event-types.service";
 import { TeamsEventTypesRepository } from "@/modules/teams/event-types/teams-event-types.repository";
 import { UsersRepository } from "@/modules/users/users.repository";
+import { OutputEventTypesService_2024_06_14 } from "@/platform/event-types/event-types_2024_06_14/services/output-event-types.service";
 
 type EventTypeRelations = {
   users: User[];
@@ -171,11 +171,15 @@ export class OutputTeamEventTypesService {
   }
 
   async getManagedEventTypeHosts(eventTypeId: number) {
-    const children = await this.teamsEventTypesRepository.getEventTypeChildren(eventTypeId);
+    const children = await this.teamsEventTypesRepository.getEventTypeChildUserIds(eventTypeId);
+    const childUserIds = children.flatMap((child) => (child.userId ? [child.userId] : []));
+    const users = await this.usersRepository.findHostDisplayByIds(childUserIds);
+    const usersById = new Map(users.map((user) => [user.id, user]));
     const transformedHosts: TeamEventTypeResponseHost[] = [];
+
     for (const child of children) {
       if (child.userId) {
-        const user = await this.usersRepository.findById(child.userId);
+        const user = usersById.get(child.userId);
         transformedHosts.push({
           userId: child.userId,
           name: user?.name || "",
@@ -194,7 +198,9 @@ export class OutputTeamEventTypesService {
     if (!schedulingType) return [];
 
     const transformedHosts: TeamEventTypeResponseHost[] = [];
-    const databaseUsers = await this.usersRepository.findByIds(databaseHosts.map((host) => host.userId));
+    const databaseUsers = await this.usersRepository.findHostDisplayByIds(
+      databaseHosts.map((host) => host.userId)
+    );
 
     for (const databaseHost of databaseHosts) {
       const databaseUser = databaseUsers.find((u) => u.id === databaseHost.userId);

@@ -1,11 +1,11 @@
 import { getEventTypeById } from "@calcom/platform-libraries/event-types";
 import type { PrismaClient } from "@calcom/prisma";
 import { Injectable } from "@nestjs/common";
-import { CreateEventTypeInput_2024_04_15 } from "@/platform/event-types/event-types_2024_04_15/inputs/create-event-type.input";
 import { PrismaReadService } from "@/modules/prisma/prisma-read.service";
 import { PrismaWriteService } from "@/modules/prisma/prisma-write.service";
 import { UsersService } from "@/modules/users/services/users.service";
 import { UserWithProfile } from "@/modules/users/users.repository";
+import { CreateEventTypeInput_2024_04_15 } from "@/platform/event-types/event-types_2024_04_15/inputs/create-event-type.input";
 
 @Injectable()
 export class EventTypesRepository_2024_04_15 {
@@ -61,7 +61,13 @@ export class EventTypesRepository_2024_04_15 {
   }
 
   async getEventTypeById(eventTypeId: number) {
-    return this.dbRead.prisma.eventType.findUnique({ where: { id: eventTypeId } });
+    return this.dbRead.prisma.eventType.findUnique({
+      where: { id: eventTypeId },
+      select: {
+        id: true,
+        userId: true,
+      },
+    });
   }
 
   async getUserEventTypeBySlug(userId: number, slug: string) {

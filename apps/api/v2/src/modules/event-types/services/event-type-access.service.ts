@@ -1,11 +1,10 @@
-import { EventTypesRepository_2024_06_14 } from "@/platform/event-types/event-types_2024_06_14/event-types.repository";
-import { ApiAuthGuardUser } from "@/modules/auth/strategies/api-auth/api-auth.strategy";
+import type { EventType } from "@calcom/prisma/client";
+import { Injectable } from "@nestjs/common";
+import type { ApiAuthGuardUser } from "@/modules/auth/strategies/api-auth/api-auth.strategy";
 import { MembershipsRepository } from "@/modules/memberships/memberships.repository";
 import { MembershipsService } from "@/modules/memberships/services/memberships.service";
 import { TeamsRepository } from "@/modules/teams/teams/teams.repository";
-import { Injectable } from "@nestjs/common";
-
-import type { EventType } from "@calcom/prisma/client";
+import { EventTypesRepository_2024_06_14 } from "@/platform/event-types/event-types_2024_06_14/event-types.repository";
 
 @Injectable()
 export class EventTypeAccessService {
@@ -16,7 +15,10 @@ export class EventTypeAccessService {
     private readonly teamsRepository: TeamsRepository
   ) {}
 
-  async userIsEventTypeAdminOrOwner(authUser: ApiAuthGuardUser, eventType: EventType): Promise<boolean> {
+  async userIsEventTypeAdminOrOwner(
+    authUser: ApiAuthGuardUser,
+    eventType: Pick<EventType, "id" | "teamId" | "userId">
+  ): Promise<boolean> {
     const authUserId = authUser.id;
     const eventTypeId = eventType.id;
     const teamId = eventType.teamId;

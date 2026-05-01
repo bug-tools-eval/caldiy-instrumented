@@ -1,5 +1,5 @@
 import { bookingWithUserAndEventDetailsSelect } from "@calcom/platform-libraries/bookings";
-import type { Prisma } from "@calcom/prisma/client";
+import type { Booking, Prisma } from "@calcom/prisma/client";
 import { Injectable } from "@nestjs/common";
 import { PrismaReadService } from "@/modules/prisma/prisma-read.service";
 import { PrismaWriteService } from "@/modules/prisma/prisma-write.service";
@@ -71,6 +71,30 @@ export class BookingsRepository_2024_08_13 {
     return this.dbRead.prisma.booking.findUnique({
       where: {
         uid: bookingUid,
+      },
+    });
+  }
+
+  async getIdAndUserIdByUid(bookingUid: string): Promise<Pick<Booking, "id" | "userId"> | null> {
+    return this.dbRead.prisma.booking.findUnique({
+      where: {
+        uid: bookingUid,
+      },
+      select: {
+        id: true,
+        userId: true,
+      },
+    });
+  }
+
+  async getIdAndEventTypeIdByUid(bookingUid: string): Promise<Pick<Booking, "id" | "eventTypeId"> | null> {
+    return this.dbRead.prisma.booking.findUnique({
+      where: {
+        uid: bookingUid,
+      },
+      select: {
+        id: true,
+        eventTypeId: true,
       },
     });
   }

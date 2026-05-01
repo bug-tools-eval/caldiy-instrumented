@@ -40,13 +40,6 @@ import {
 import { Request } from "express";
 import { DateTime } from "luxon";
 import { z } from "zod";
-import { CalendarLink } from "@/platform/bookings/2024-08-13/outputs/calendar-links.output";
-import { BookingsRepository_2024_08_13 } from "@/platform/bookings/2024-08-13/repositories/bookings.repository";
-import { ErrorsBookingsService_2024_08_13 } from "@/platform/bookings/2024-08-13/services/errors.service";
-import { InputBookingsService_2024_08_13 } from "@/platform/bookings/2024-08-13/services/input.service";
-import { OutputBookingsService_2024_08_13 } from "@/platform/bookings/2024-08-13/services/output.service";
-import { PlatformBookingsService } from "@/platform/bookings/shared/platform-bookings.service";
-import { EventTypesRepository_2024_06_14 } from "@/platform/event-types/event-types_2024_06_14/event-types.repository";
 import { getPagination } from "@/lib/pagination/pagination";
 import { RecurringBookingService } from "@/lib/services/recurring-booking.service";
 import { RegularBookingService } from "@/lib/services/regular-booking.service";
@@ -62,6 +55,13 @@ import { TeamsEventTypesRepository } from "@/modules/teams/event-types/teams-eve
 import { TeamsRepository } from "@/modules/teams/teams/teams.repository";
 import { UsersService } from "@/modules/users/services/users.service";
 import { UsersRepository } from "@/modules/users/users.repository";
+import { CalendarLink } from "@/platform/bookings/2024-08-13/outputs/calendar-links.output";
+import { BookingsRepository_2024_08_13 } from "@/platform/bookings/2024-08-13/repositories/bookings.repository";
+import { ErrorsBookingsService_2024_08_13 } from "@/platform/bookings/2024-08-13/services/errors.service";
+import { InputBookingsService_2024_08_13 } from "@/platform/bookings/2024-08-13/services/input.service";
+import { OutputBookingsService_2024_08_13 } from "@/platform/bookings/2024-08-13/services/output.service";
+import { PlatformBookingsService } from "@/platform/bookings/shared/platform-bookings.service";
+import { EventTypesRepository_2024_06_14 } from "@/platform/event-types/event-types_2024_06_14/event-types.repository";
 
 export const BOOKING_REASSIGN_PERMISSION_ERROR = "You do not have permission to reassign this booking";
 
@@ -158,7 +158,7 @@ export class BookingsService_2024_08_13 {
   }
 
   async checkEventTypeHasHosts(eventTypeId: number) {
-    const eventType = await this.eventTypesRepository.getEventTypeWithHosts(eventTypeId);
+    const eventType = await this.eventTypesRepository.getEventTypeHostCheck(eventTypeId);
     if (!eventType?.hosts?.length) {
       throw new UnprocessableEntityException(
         `Can't book this team event type because it has no hosts. Please, add at least 1 host to event type with id=${eventTypeId} belonging to team with id=${eventType?.teamId} and try again.`
@@ -729,11 +729,11 @@ export class BookingsService_2024_08_13 {
       oAuthClient.id,
       queryParamsAttendeeEmail
     );
-    const [attendee, managedAttendee] = await Promise.all([
-      this.usersRepository.findByEmail(queryParamsAttendeeEmail),
-      this.usersRepository.findByEmail(managedAttendeeEmail),
+    const [attendeeExists, managedAttendeeExists] = await Promise.all([
+      this.usersRepository.existsByEmail(queryParamsAttendeeEmail),
+      this.usersRepository.existsByEmail(managedAttendeeEmail),
     ]);
-    if (!attendee && managedAttendee) {
+    if (!attendeeExists && managedAttendeeExists) {
       return managedAttendeeEmail;
     }
 

@@ -1,5 +1,5 @@
+import { apiKeyListItemSelect } from "@calcom/features/api-keys-legacy/api-keys/repositories/PrismaApiKeyRepository";
 import prisma from "@calcom/prisma";
-
 import type { TrpcSessionUser } from "../../../types";
 import type { TEditInputSchema } from "./edit.schema";
 
@@ -34,6 +34,7 @@ export const editHandler = async ({ ctx, input }: EditOptions) => {
         where: {
           id,
         },
+        select: apiKeyListItemSelect,
       },
     },
   });

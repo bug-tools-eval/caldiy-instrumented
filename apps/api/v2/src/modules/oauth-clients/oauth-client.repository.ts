@@ -1,12 +1,58 @@
+import type { PlatformOAuthClient, Prisma } from "@calcom/prisma/client";
+import { Injectable } from "@nestjs/common";
 import { PrismaReadService } from "@/modules/prisma/prisma-read.service";
 import { PrismaWriteService } from "@/modules/prisma/prisma-write.service";
-import { Injectable } from "@nestjs/common";
 
-import type { PlatformOAuthClient, Prisma } from "@calcom/prisma/client";
+const oauthClientBookingSelect = {
+  id: true,
+  bookingCancelRedirectUri: true,
+  bookingRescheduleRedirectUri: true,
+  bookingRedirectUri: true,
+  areEmailsEnabled: true,
+  areCalendarEventsEnabled: true,
+} satisfies Prisma.PlatformOAuthClientSelect;
+
+const oauthClientOutputSelect = {
+  id: true,
+  name: true,
+  secret: true,
+  permissions: true,
+  logo: true,
+  redirectUris: true,
+  organizationId: true,
+  createdAt: true,
+  bookingRedirectUri: true,
+  bookingCancelRedirectUri: true,
+  bookingRescheduleRedirectUri: true,
+  areEmailsEnabled: true,
+  areDefaultEventTypesEnabled: true,
+  areCalendarEventsEnabled: true,
+} satisfies Prisma.PlatformOAuthClientSelect;
+
+const oauthClientManagedUserSelect = {
+  id: true,
+  organizationId: true,
+  areDefaultEventTypesEnabled: true,
+} satisfies Prisma.PlatformOAuthClientSelect;
+
+export type OAuthClientBookingFields = Prisma.PlatformOAuthClientGetPayload<{
+  select: typeof oauthClientBookingSelect;
+}>;
+
+export type OAuthClientOutputFields = Prisma.PlatformOAuthClientGetPayload<{
+  select: typeof oauthClientOutputSelect;
+}>;
+
+export type OAuthClientManagedUserFields = Prisma.PlatformOAuthClientGetPayload<{
+  select: typeof oauthClientManagedUserSelect;
+}>;
 
 @Injectable()
 export class OAuthClientRepository {
-  constructor(private readonly dbRead: PrismaReadService, private readonly dbWrite: PrismaWriteService) {}
+  constructor(
+    private readonly dbRead: PrismaReadService,
+    private readonly dbWrite: PrismaWriteService
+  ) {}
 
   async createOAuthClient(
     organizationId: number,
@@ -17,12 +63,91 @@ export class OAuthClientRepository {
         ...data,
         organizationId,
       },
+      select: {
+        id: true,
+        secret: true,
+      },
     });
   }
 
-  async getOAuthClient(clientId: string): Promise<PlatformOAuthClient | null> {
+  async getOAuthClient(clientId: string): Promise<OAuthClientOutputFields | null> {
     return this.dbRead.prisma.platformOAuthClient.findUnique({
       where: { id: clientId },
+      select: oauthClientOutputSelect,
+    });
+  }
+
+  async getOAuthClientProviderFields(
+    clientId: string
+  ): Promise<Pick<PlatformOAuthClient, "id" | "organizationId" | "name"> | null> {
+    return this.dbRead.prisma.platformOAuthClient.findUnique({
+      where: { id: clientId },
+      select: {
+        id: true,
+        organizationId: true,
+        name: true,
+      },
+    });
+  }
+
+  async getOAuthClientBookingFields(clientId: string): Promise<OAuthClientBookingFields | null> {
+    return this.dbRead.prisma.platformOAuthClient.findUnique({
+      where: { id: clientId },
+      select: oauthClientBookingSelect,
+    });
+  }
+
+  async getOAuthClientRedirectUrisById(
+    clientId: string
+  ): Promise<Pick<PlatformOAuthClient, "redirectUris"> | null> {
+    return this.dbRead.prisma.platformOAuthClient.findUnique({
+      where: { id: clientId },
+      select: {
+        redirectUris: true,
+      },
+    });
+  }
+
+  async getOAuthClientAuthFieldsById(
+    clientId: string
+  ): Promise<Pick<PlatformOAuthClient, "secret" | "organizationId"> | null> {
+    return this.dbRead.prisma.platformOAuthClient.findUnique({
+      where: { id: clientId },
+      select: {
+        secret: true,
+        organizationId: true,
+      },
+    });
+  }
+
+  async getOAuthClientManagedUserFields(clientId: string): Promise<OAuthClientManagedUserFields | null> {
+    return this.dbRead.prisma.platformOAuthClient.findUnique({
+      where: { id: clientId },
+      select: oauthClientManagedUserSelect,
+    });
+  }
+
+  async getOAuthClientPermissionsById(
+    clientId: string
+  ): Promise<Pick<PlatformOAuthClient, "id" | "permissions"> | null> {
+    return this.dbRead.prisma.platformOAuthClient.findUnique({
+      where: { id: clientId },
+      select: {
+        id: true,
+        permissions: true,
+      },
+    });
+  }
+
+  async getOAuthClientOrganizationById(
+    clientId: string
+  ): Promise<Pick<PlatformOAuthClient, "id" | "organizationId"> | null> {
+    return this.dbRead.prisma.platformOAuthClient.findUnique({
+      where: { id: clientId },
+      select: {
+        id: true,
+        organizationId: true,
+      },
     });
   }
 
@@ -37,12 +162,14 @@ export class OAuthClientRepository {
           },
         },
       },
-      include: {
+      select: {
         authorizationTokens: {
           where: {
             id: tokenId,
           },
-          include: {
+          take: 1,
+          select: {
+            id: true,
             owner: {
               select: {
                 id: true,
@@ -60,39 +187,47 @@ export class OAuthClientRepository {
         id: clientId,
         secret: clientSecret,
       },
-      include: {
+      select: {
         refreshToken: {
           where: {
             secret: refreshToken,
+          },
+          take: 1,
+          select: {
+            secret: true,
+            userId: true,
           },
         },
       },
     });
   }
 
-  async getOrganizationOAuthClients(organizationId: number): Promise<PlatformOAuthClient[]> {
+  async getOrganizationOAuthClients(organizationId: number): Promise<OAuthClientOutputFields[]> {
     return this.dbRead.prisma.platformOAuthClient.findMany({
       where: {
         organization: {
           id: organizationId,
         },
       },
+      select: oauthClientOutputSelect,
     });
   }
 
   async updateOAuthClient(
     clientId: string,
     updateData: Prisma.PlatformOAuthClientUpdateInput
-  ): Promise<PlatformOAuthClient> {
+  ): Promise<OAuthClientOutputFields> {
     return this.dbWrite.prisma.platformOAuthClient.update({
       where: { id: clientId },
       data: updateData,
+      select: oauthClientOutputSelect,
     });
   }
 
-  async deleteOAuthClient(clientId: string): Promise<PlatformOAuthClient> {
+  async deleteOAuthClient(clientId: string): Promise<OAuthClientOutputFields> {
     return this.dbWrite.prisma.platformOAuthClient.delete({
       where: { id: clientId },
+      select: oauthClientOutputSelect,
     });
   }
 
@@ -105,6 +240,7 @@ export class OAuthClientRepository {
           },
         },
       },
+      select: oauthClientBookingSelect,
     });
   }
 
@@ -117,6 +253,7 @@ export class OAuthClientRepository {
           },
         },
       },
+      select: oauthClientBookingSelect,
     });
   }
 
@@ -132,7 +269,14 @@ export class OAuthClientRepository {
   async getByEventTypeHosts(eventTypeId: number) {
     const hostWithUserPlatformClient = await this.dbRead.prisma.host.findFirst({
       select: {
-        user: { select: { platformOAuthClients: true } },
+        user: {
+          select: {
+            platformOAuthClients: {
+              take: 1,
+              select: oauthClientBookingSelect,
+            },
+          },
+        },
       },
       where: {
         eventTypeId: eventTypeId,

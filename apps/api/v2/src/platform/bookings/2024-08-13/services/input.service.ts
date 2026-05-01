@@ -23,6 +23,14 @@ import { DateInput, DateTime } from "luxon";
 import { NextApiRequest } from "next/types";
 import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
+import { isApiKey, sha256Hash, stripApiKey } from "@/lib/api-key";
+import { defaultBookingResponses } from "@/lib/safe-parse/default-responses-booking";
+import { safeParse } from "@/lib/safe-parse/safe-parse";
+import { ApiKeysRepository } from "@/modules/api-keys/api-keys-repository";
+import { BookingSeatRepository } from "@/modules/booking-seat/booking-seat.repository";
+import { OAuthClientUsersService } from "@/modules/oauth-clients/services/oauth-clients-users.service";
+import { OAuthFlowService } from "@/modules/oauth-clients/services/oauth-flow.service";
+import { UsersRepository } from "@/modules/users/users.repository";
 import { BookingsRepository_2024_08_13 } from "@/platform/bookings/2024-08-13/repositories/bookings.repository";
 import {
   EventTypeWithOwnerAndTeam,
@@ -36,14 +44,6 @@ import { PlatformBookingsService } from "@/platform/bookings/shared/platform-boo
 import { EventTypesRepository_2024_06_14 } from "@/platform/event-types/event-types_2024_06_14/event-types.repository";
 import { OutputEventTypesService_2024_06_14 } from "@/platform/event-types/event-types_2024_06_14/services/output-event-types.service";
 import { apiToInternalintegrationsMapping } from "@/platform/event-types/event-types_2024_06_14/transformers";
-import { isApiKey, sha256Hash, stripApiKey } from "@/lib/api-key";
-import { defaultBookingResponses } from "@/lib/safe-parse/default-responses-booking";
-import { safeParse } from "@/lib/safe-parse/safe-parse";
-import { ApiKeysRepository } from "@/modules/api-keys/api-keys-repository";
-import { BookingSeatRepository } from "@/modules/booking-seat/booking-seat.repository";
-import { OAuthClientUsersService } from "@/modules/oauth-clients/services/oauth-clients-users.service";
-import { OAuthFlowService } from "@/modules/oauth-clients/services/oauth-flow.service";
-import { UsersRepository } from "@/modules/users/users.repository";
 
 type BookingRequest = NextApiRequest & {
   userId: number | undefined;
@@ -543,7 +543,7 @@ export class InputBookingsService_2024_08_13 {
 
     if (request.body.rescheduledBy) {
       if (request.body.rescheduledBy !== bodyTransformed.responses.email) {
-        userId = (await this.usersRepository.findByEmail(request.body.rescheduledBy))?.id;
+        userId = (await this.usersRepository.findIdByEmail(request.body.rescheduledBy))?.id;
       }
     }
 
@@ -574,7 +574,7 @@ export class InputBookingsService_2024_08_13 {
   }
 
   isRescheduleSeatedBody(body: RescheduleBookingInput): body is RescheduleSeatedBookingInput_2024_08_13 {
-    return Object.prototype.hasOwnProperty.call(body, "seatUid");
+    return Object.hasOwn(body, "seatUid");
   }
 
   async transformInputRescheduleSeatedBooking(
@@ -812,7 +812,7 @@ export class InputBookingsService_2024_08_13 {
   }
 
   isCancelSeatedBody(body: CancelBookingInput): body is CancelSeatedBookingInput_2024_08_13 {
-    return Object.prototype.hasOwnProperty.call(body, "seatUid");
+    return Object.hasOwn(body, "seatUid");
   }
 
   async transformInputCancelBooking(bookingUid: string, inputBooking: CancelBookingInput_2024_08_13) {

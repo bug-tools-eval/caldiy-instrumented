@@ -55,7 +55,7 @@ export class OAuthFlowController {
     @GetUser("id") userId: number,
     @Response() res: ExpressResponse
   ): Promise<void> {
-    const oauthClient = await this.oauthClientRepository.getOAuthClient(clientId);
+    const oauthClient = await this.oauthClientRepository.getOAuthClientRedirectUrisById(clientId);
     if (!oauthClient) {
       throw new BadRequestException(`OAuth client with ID '${clientId}' not found`);
     }

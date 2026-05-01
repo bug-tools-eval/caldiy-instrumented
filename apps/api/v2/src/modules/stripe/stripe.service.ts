@@ -1,25 +1,26 @@
-import { AppConfig } from "@/config/type";
-import { AppsRepository } from "@/modules/apps/apps.repository";
-import { CredentialsRepository } from "@/modules/credentials/credentials.repository";
-import { MembershipsRepository } from "@/modules/memberships/memberships.repository";
-import { stripeInstance } from "@/modules/stripe/utils/newStripeInstance";
-import { StripeData } from "@/modules/stripe/utils/stripeDataSchemas";
-import { UsersRepository } from "@/modules/users/users.repository";
+import { SUCCESS_STATUS } from "@calcom/platform-constants";
+import type { Prisma, User } from "@calcom/prisma/client";
 import {
-  Injectable,
-  NotFoundException,
   BadRequestException,
-  UnauthorizedException,
+  Injectable,
   InternalServerErrorException,
+  NotFoundException,
+  UnauthorizedException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import Stripe from "stripe";
 import { z } from "zod";
-
-import { SUCCESS_STATUS } from "@calcom/platform-constants";
-import type { Prisma, Credential, User } from "@calcom/prisma/client";
-
 import { stripeKeysResponseSchema } from "./utils/stripeDataSchemas";
+import { AppConfig } from "@/config/type";
+import { AppsRepository } from "@/modules/apps/apps.repository";
+import {
+  type CredentialForConnectionCheck,
+  CredentialsRepository,
+} from "@/modules/credentials/credentials.repository";
+import { MembershipsRepository } from "@/modules/memberships/memberships.repository";
+import { stripeInstance } from "@/modules/stripe/utils/newStripeInstance";
+import { StripeData } from "@/modules/stripe/utils/stripeDataSchemas";
+import { UsersRepository } from "@/modules/users/users.repository";
 
 import stringify = require("qs-stringify");
 
@@ -118,7 +119,7 @@ export class StripeService {
       userId
     );
 
-    const credentialIdsToDelete = existingCredentials.map((item: Credential) => item.id);
+    const credentialIdsToDelete = existingCredentials.map((item) => item.id);
     if (credentialIdsToDelete.length > 0) {
       await this.appsRepository.deleteAppCredentials(credentialIdsToDelete, userId);
     }
@@ -143,7 +144,7 @@ export class StripeService {
   }
 
   async validateStripeCredentials(
-    credentials?: Credential | null
+    credentials?: CredentialForConnectionCheck | null
   ): Promise<{ status: typeof SUCCESS_STATUS }> {
     if (!credentials) {
       throw new NotFoundException("Credentials for stripe not found.");
@@ -214,7 +215,7 @@ export class StripeService {
   }
 
   async getStripeCustomerIdFromUserId(userId: number) {
-    const user = await this.usersRepository.findById(userId);
+    const user = await this.usersRepository.findStripeCustomerFieldsById(userId);
 
     if (!user?.email) return null;
     const customerId = await this.getStripeCustomerId(user);

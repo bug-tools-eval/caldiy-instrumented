@@ -1,9 +1,9 @@
 import type { SortOrderType } from "@calcom/platform-types";
 import type { Prisma } from "@calcom/prisma/client";
 import { Injectable } from "@nestjs/common";
-import { InputEventTransformed_2024_06_14 } from "@/platform/event-types/event-types_2024_06_14/transformed";
 import { PrismaReadService } from "@/modules/prisma/prisma-read.service";
 import { PrismaWriteService } from "@/modules/prisma/prisma-write.service";
+import { InputEventTransformed_2024_06_14 } from "@/platform/event-types/event-types_2024_06_14/transformed";
 
 @Injectable()
 export class EventTypesRepository_2024_06_14 {
@@ -57,6 +57,21 @@ export class EventTypesRepository_2024_06_14 {
     return this.dbRead.prisma.eventType.findUnique({
       where: { id: eventTypeId },
       include: { hosts: true },
+    });
+  }
+
+  async getEventTypeHostCheck(eventTypeId: number) {
+    return this.dbRead.prisma.eventType.findUnique({
+      where: { id: eventTypeId },
+      select: {
+        teamId: true,
+        hosts: {
+          take: 1,
+          select: {
+            userId: true,
+          },
+        },
+      },
     });
   }
 
@@ -182,6 +197,17 @@ export class EventTypesRepository_2024_06_14 {
     return this.dbRead.prisma.eventType.findUnique({
       where: { id: eventTypeId },
       include: { owner: true, team: true },
+    });
+  }
+
+  async getEventTypeAccessFields(eventTypeId: number) {
+    return this.dbRead.prisma.eventType.findUnique({
+      where: { id: eventTypeId },
+      select: {
+        id: true,
+        teamId: true,
+        userId: true,
+      },
     });
   }
 

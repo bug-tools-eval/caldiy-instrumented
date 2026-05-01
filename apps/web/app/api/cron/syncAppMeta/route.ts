@@ -1,12 +1,12 @@
-import { defaultResponderForAppDir } from "app/api/defaultResponderForAppDir";
-import type { NextRequest } from "next/server";
-import { NextResponse } from "next/server";
-
+import process from "node:process";
 import { getAppWithMetadata } from "@calcom/app-store/_appRegistry";
 import { shouldEnableApp } from "@calcom/app-store/_utils/validateAppKeys";
 import logger from "@calcom/lib/logger";
 import { prisma } from "@calcom/prisma";
 import type { AppCategories, Prisma } from "@calcom/prisma/client";
+import { defaultResponderForAppDir } from "app/api/defaultResponderForAppDir";
+import type { NextRequest } from "next/server";
+import { NextResponse } from "next/server";
 
 const isDryRun = process.env.CRON_ENABLE_APP_SYNC !== "true";
 const log = logger.getSubLogger({
@@ -26,7 +26,15 @@ async function postHandler(request: NextRequest) {
 
   log.info(`🧐 Checking DB apps are in-sync with app metadata`);
 
-  const dbApps = await prisma.app.findMany();
+  const dbApps = await prisma.app.findMany({
+    select: {
+      slug: true,
+      dirName: true,
+      categories: true,
+      keys: true,
+      enabled: true,
+    },
+  });
 
   for await (const dbApp of dbApps) {
     const app = await getAppWithMetadata(dbApp);
