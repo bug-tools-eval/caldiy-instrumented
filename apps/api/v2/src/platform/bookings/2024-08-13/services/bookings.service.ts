@@ -158,7 +158,7 @@ export class BookingsService_2024_08_13 {
   }
 
   async checkEventTypeHasHosts(eventTypeId: number) {
-    const eventType = await this.eventTypesRepository.getEventTypeWithHosts(eventTypeId);
+    const eventType = await this.eventTypesRepository.getEventTypeHostCheck(eventTypeId);
     if (!eventType?.hosts?.length) {
       throw new UnprocessableEntityException(
         `Can't book this team event type because it has no hosts. Please, add at least 1 host to event type with id=${eventTypeId} belonging to team with id=${eventType?.teamId} and try again.`

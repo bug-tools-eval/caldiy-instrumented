@@ -52,9 +52,7 @@ export class BookingLocationService_2024_08_13 {
     }
 
     if (existingBooking.eventTypeId && existingBooking.eventType) {
-      const eventType = await this.eventTypesRepository.getEventTypeByIdWithOwnerAndTeam(
-        existingBooking.eventTypeId
-      );
+      const eventType = await this.eventTypesRepository.getEventTypeAccessFields(existingBooking.eventTypeId);
       if (eventType) {
         const isAllowed = await this.eventTypeAccessService.userIsEventTypeAdminOrOwner(user, eventType);
         if (!isAllowed) {
