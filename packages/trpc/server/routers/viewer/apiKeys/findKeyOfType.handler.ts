@@ -1,6 +1,6 @@
+import { apiKeyListItemSelect } from "@calcom/features/api-keys-legacy/api-keys/repositories/PrismaApiKeyRepository";
 import prisma from "@calcom/prisma";
 import { MembershipRole } from "@calcom/prisma/enums";
-
 import type { TrpcSessionUser } from "../../../types";
 import { checkPermissions } from "./_auth-middleware";
 import type { TFindKeyOfTypeInputSchema } from "./findKeyOfType.schema";
@@ -24,5 +24,6 @@ export const findKeyOfTypeHandler = async ({ ctx, input }: FindKeyOfTypeOptions)
       userId,
       appId,
     },
+    select: apiKeyListItemSelect,
   });
 };
