@@ -1,3 +1,4 @@
+import process from "node:process";
 import { EventTypeRepository } from "@calcom/features/eventtypes/repositories/eventTypeRepository";
 import { hasFilter } from "@calcom/features/filters/lib/hasFilter";
 import { MembershipRepository } from "@calcom/features/membership/repositories/MembershipRepository";
@@ -11,15 +12,23 @@ import logger from "@calcom/lib/logger";
 import { markdownToSafeHTML } from "@calcom/lib/markdownToSafeHTML";
 import { safeStringify } from "@calcom/lib/safeStringify";
 import prisma from "@calcom/prisma";
+import type { Prisma } from "@calcom/prisma/client";
 import { MembershipRole, SchedulingType } from "@calcom/prisma/enums";
 import { eventTypeMetaDataSchemaWithUntypedApps, teamMetadataSchema } from "@calcom/prisma/zod-utils";
+import type { UserProfile } from "@calcom/types/UserProfile";
 import { orderBy } from "lodash";
 
 class PermissionCheckService {
   constructor(_prisma?: unknown) {}
-  async checkPermission(..._args: unknown[]) { return true; }
-  async hasPermission(..._args: unknown[]) { return true; }
-  async getTeamIdsWithPermission(..._args: unknown[]): Promise<number[]> { return []; }
+  async checkPermission(..._args: unknown[]) {
+    return true;
+  }
+  async hasPermission(..._args: unknown[]) {
+    return true;
+  }
+  async getTeamIdsWithPermission(..._args: unknown[]): Promise<number[]> {
+    return [];
+  }
 }
 const getBookerBaseUrl = async (_orgSlug?: string | number | null): Promise<string> =>
   process.env.NEXT_PUBLIC_WEBAPP_URL || "https://app.cal.com";
@@ -73,15 +82,30 @@ export const getEventTypesByViewer = async (user: User, filters?: Filters) => {
   ]);
 
   const eventTypeRepo = new EventTypeRepository(prisma);
+  const membershipWhere: Prisma.MembershipWhereInput = {
+    accepted: true,
+  };
+  if (filters?.teamIds) {
+    membershipWhere.teamId = { in: filters.teamIds };
+  }
+
+  let teamEventTypeWhere: Prisma.EventTypeWhereInput | undefined;
+  if (filters?.schedulingTypes) {
+    teamEventTypeWhere = {
+      schedulingType: {
+        in: filters.schedulingTypes,
+      },
+    };
+  }
+
   const [profileMemberships, profileEventTypes] = await Promise.all([
     MembershipRepository.findAllByUpIdIncludeTeamWithMembersAndEventTypes(
       {
         upId: userProfile.upId,
       },
       {
-        where: {
-          accepted: true,
-        },
+        where: membershipWhere,
+        eventTypeWhere: teamEventTypeWhere,
       }
     ),
     shouldListUserEvents
@@ -127,17 +151,57 @@ export const getEventTypesByViewer = async (user: User, filters?: Filters) => {
   );
 
   type UserEventTypes = (typeof profileEventTypes)[number];
+  type EventTypeUser = UserEventTypes["users"][number];
+  type EnrichedEventTypeUser = EventTypeUser & {
+    nonProfileUsername: string | null;
+    profile: UserProfile;
+  };
+
+  const userRepo = new UserRepository(prisma);
+  const getEventTypeUsers = (eventType: UserEventTypes): EventTypeUser[] => {
+    if (eventType.hosts?.length) return eventType.hosts.map((host) => host.user);
+    return eventType.users;
+  };
+
+  const usersById = new Map<number, EventTypeUser>();
+  const addUsersFromEventType = (eventType: UserEventTypes) => {
+    getEventTypeUsers(eventType).forEach((user) => {
+      usersById.set(user.id, user);
+    });
+    (eventType.children || []).forEach((child) => {
+      child.users.forEach((user) => {
+        usersById.set(user.id, user);
+      });
+    });
+  };
+
+  profileEventTypes.forEach(addUsersFromEventType);
+  profileMemberships.forEach((membership) => {
+    membership.team.eventTypes.forEach(addUsersFromEventType);
+  });
+
+  const enrichedUsers = await userRepo.enrichUsersWithTheirProfiles(Array.from(usersById.values()));
+  const enrichedUsersById = new Map<number, EnrichedEventTypeUser>(
+    enrichedUsers.map((user) => [user.id, user])
+  );
+
+  const enrichEventTypeUsers = async (users: EventTypeUser[]): Promise<EnrichedEventTypeUser[]> =>
+    await Promise.all(
+      users.map(async (user) => {
+        const enrichedUser = enrichedUsersById.get(user.id);
+        if (enrichedUser) return enrichedUser;
+
+        return await userRepo.enrichUserWithItsProfile({
+          user,
+        });
+      })
+    );
 
   const mapEventType = async (eventType: UserEventTypes) => {
-    const userRepo = new UserRepository(prisma);
-    const eventTypeUsers = eventType?.hosts?.length
-      ? eventType.hosts.map((host) => host.user)
-      : eventType.users;
-    const enrichedUsers = await userRepo.enrichUsersWithTheirProfiles(eventTypeUsers);
+    const enrichedUsers = await enrichEventTypeUsers(getEventTypeUsers(eventType));
 
     const children = eventType.children || [];
-    const allChildUsers = children.flatMap((c) => c.users);
-    const enrichedAllChildUsers = await userRepo.enrichUsersWithTheirProfiles(allChildUsers);
+    const enrichedAllChildUsers = await enrichEventTypeUsers(children.flatMap((c) => c.users));
     const enrichedUsersMap = new Map(enrichedAllChildUsers.map((user) => [user.id, user]));
 
     const enrichedChildren = children.map((c) => ({

@@ -75,7 +75,6 @@ export type ManagedEventCancellationResult = {
   status: BookingStatus;
 };
 
-
 type TeamBookingsParamsBase = {
   user: { id: number; email: string };
   teamId: number;
@@ -704,6 +703,9 @@ export class BookingRepository implements IBookingRepository {
       },
     };
 
+    const userIds = Array.from(userIdAndEmailMap.keys());
+    const userEmails = Array.from(userIdAndEmailMap.values());
+
     const bookingsSelect = {
       id: true,
       uid: true,
@@ -711,7 +713,6 @@ export class BookingRepository implements IBookingRepository {
       startTime: true,
       endTime: true,
       title: true,
-      attendees: true,
       eventType: {
         select: {
           id: true,
@@ -734,11 +735,20 @@ export class BookingRepository implements IBookingRepository {
       }),
     } satisfies Prisma.BookingSelect;
 
+    const bookingsSelectWithAttendees = {
+      ...bookingsSelect,
+      attendees: {
+        select: {
+          email: true,
+        },
+      },
+    } satisfies Prisma.BookingSelect;
+
     const currentBookingsAllUsersQueryOne = this.prismaClient.booking.findMany({
       where: {
         ...sharedQuery,
         userId: {
-          in: Array.from(userIdAndEmailMap.keys()),
+          in: userIds,
         },
       },
       select: bookingsSelect,
@@ -750,12 +760,12 @@ export class BookingRepository implements IBookingRepository {
         attendees: {
           some: {
             email: {
-              in: Array.from(userIdAndEmailMap.values()),
+              in: userEmails,
             },
           },
         },
       },
-      select: bookingsSelect,
+      select: bookingsSelectWithAttendees,
     });
 
     const currentBookingsAllUsersQueryThree = eventTypeId
@@ -772,7 +782,7 @@ export class BookingRepository implements IBookingRepository {
               in: [BookingStatus.PENDING],
             },
           },
-          select: bookingsSelect,
+          select: bookingsSelectWithAttendees,
         })
       : [];
 

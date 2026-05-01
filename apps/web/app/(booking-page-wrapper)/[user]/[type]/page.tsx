@@ -1,23 +1,23 @@
-import { WEBAPP_URL } from "@calcom/lib/constants";
 import { loadTranslations } from "@calcom/i18n/server";
-import { buildLegacyCtx, decodeParams } from "@lib/buildLegacyCtx";
+import { WEBAPP_URL } from "@calcom/lib/constants";
+import { type buildLegacyCtx, decodeParams } from "@lib/buildLegacyCtx";
 import { getServerSideProps } from "@server/lib/[user]/[type]/getServerSideProps";
 import type { PageProps } from "app/_types";
 import { generateMeetingMetadata } from "app/_utils";
 import { CustomI18nProvider } from "app/CustomI18nProvider";
+import { createCachedLegacyPageData } from "app/legacyPageDataCache";
 import { withAppDirSsr } from "app/WithAppDirSsr";
 import type { Metadata } from "next";
-import { cookies, headers } from "next/headers";
-import type React from "react";
 import type { PageProps as LegacyPageProps } from "~/users/views/users-type-public-view";
 import LegacyPage from "~/users/views/users-type-public-view";
 
 const getData: (ctx: ReturnType<typeof buildLegacyCtx>) => Promise<LegacyPageProps> =
   withAppDirSsr<LegacyPageProps>(getServerSideProps);
 
+const getPageData: (pageProps: PageProps) => Promise<LegacyPageProps> = createCachedLegacyPageData(getData);
+
 const ServerPage = async ({ params, searchParams }: PageProps): Promise<JSX.Element> => {
-  const legacyCtx = buildLegacyCtx(await headers(), await cookies(), await params, await searchParams);
-  const props = await getData(legacyCtx);
+  const props = await getPageData({ params, searchParams });
 
   const locale = props.eventData?.interfaceLanguage;
   if (locale) {
@@ -34,8 +34,7 @@ const ServerPage = async ({ params, searchParams }: PageProps): Promise<JSX.Elem
 };
 
 export const generateMetadata = async ({ params, searchParams }: PageProps): Promise<Metadata> => {
-  const legacyCtx = buildLegacyCtx(await headers(), await cookies(), await params, await searchParams);
-  const props = await getData(legacyCtx);
+  const props = await getPageData({ params, searchParams });
 
   const { booking, isSEOIndexable = true, eventData, isBrandingHidden } = props;
   const rescheduleUid = booking?.uid;

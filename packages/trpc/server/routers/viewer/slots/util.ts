@@ -569,7 +569,10 @@ export class AvailableSlotsService {
 
             const selectedDuration = (duration || eventType.length) ?? 0;
 
-            const { title: durationTitle, source: durationSource } = LimitSources.eventDurationLimit({ limit, unit });
+            const { title: durationTitle, source: durationSource } = LimitSources.eventDurationLimit({
+              limit,
+              unit,
+            });
 
             if (selectedDuration > limit) {
               limitManager.addBusyTime({
@@ -786,14 +789,24 @@ export class AvailableSlotsService {
     }
 
     function _enrichUsersWithData() {
+      type CurrentBooking = (typeof currentBookingsAllUsers)[number];
+      type CurrentBookingWithAttendees = CurrentBooking & { attendees: { email: string }[] };
+      const bookingHasAttendees = (booking: CurrentBooking): booking is CurrentBookingWithAttendees =>
+        "attendees" in booking;
+
       return usersWithCredentials.map((currentUser) => {
         return {
           ...currentUser,
           currentBookings: currentBookingsAllUsers
-            .filter(
-              (b) => b.userId === currentUser.id || b.attendees?.some((a) => a.email === currentUser.email)
-            )
+            .filter((booking) => {
+              if (booking.userId === currentUser.id) return true;
+              if (!bookingHasAttendees(booking)) return false;
+
+              return booking.attendees.some((attendee) => attendee.email === currentUser.email);
+            })
             .map((bookings) => {
+              if (!bookingHasAttendees(bookings)) return bookings;
+
               const { attendees: _attendees, ...bookingWithoutAttendees } = bookings;
               return bookingWithoutAttendees;
             }),

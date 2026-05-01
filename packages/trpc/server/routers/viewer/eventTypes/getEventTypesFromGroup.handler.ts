@@ -7,7 +7,7 @@ import { prisma } from "@calcom/prisma";
 import type { Prisma } from "@calcom/prisma/client";
 import type { TrpcSessionUser } from "../../../types";
 import type { TGetEventTypesFromGroupSchema } from "./getByViewer.schema";
-import { mapEventType } from "./util";
+import { buildEventTypeUserProfileMap, mapEventType } from "./util";
 
 const log = logger.getSubLogger({ prefix: ["getEventTypesFromGroup"] });
 
@@ -150,7 +150,10 @@ export const getEventTypesFromGroup = async ({
     nextCursor = nextItem?.id;
   }
 
-  const mappedEventTypes: MappedEventType[] = await Promise.all(eventTypes.map(mapEventType));
+  const enrichedUsersById = await buildEventTypeUserProfileMap(eventTypes);
+  const mappedEventTypes: MappedEventType[] = await Promise.all(
+    eventTypes.map((eventType) => mapEventType(eventType, enrichedUsersById))
+  );
 
   const eventTypeIds = mappedEventTypes.map((et) => et.id);
   const userHostEntries = await prisma.host.findMany({
