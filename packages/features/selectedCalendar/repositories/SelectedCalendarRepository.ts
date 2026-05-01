@@ -206,7 +206,7 @@ export class SelectedCalendarRepository implements ISelectedCalendarRepository {
   }
 
   static async delete({ where }: { where: Prisma.SelectedCalendarUncheckedCreateInput }) {
-    const calendarsToDelete = await SelectedCalendarRepository.findMany({ where });
+    const calendarsToDelete = await SelectedCalendarRepository.findIdsForSingleMutation({ where });
 
     if (calendarsToDelete.length === 0) {
       throw new Error("SelectedCalendar not found");
@@ -340,6 +340,16 @@ export class SelectedCalendarRepository implements ISelectedCalendarRepository {
     return await prisma.selectedCalendar.findMany(args);
   }
 
+  private static async findIdsForSingleMutation({ where }: { where: FindManyArgs["where"] }) {
+    return await prisma.selectedCalendar.findMany({
+      where,
+      take: 2,
+      select: {
+        id: true,
+      },
+    });
+  }
+
   static async findUniqueOrThrow({ where }: { where: Prisma.SelectedCalendarWhereInput }) {
     const calendars = await prisma.selectedCalendar.findMany({ where });
     if (calendars.length === 0) {
@@ -383,7 +393,9 @@ export class SelectedCalendarRepository implements ISelectedCalendarRepository {
   }
 
   static async update(args: UpdateArguments) {
-    const calendarsToUpdate = await SelectedCalendarRepository.findMany({ where: args.where });
+    const calendarsToUpdate = await SelectedCalendarRepository.findIdsForSingleMutation({
+      where: args.where,
+    });
 
     if (calendarsToUpdate.length === 0) {
       throw new Error("SelectedCalendar not found");
