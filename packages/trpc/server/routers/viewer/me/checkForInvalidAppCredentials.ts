@@ -6,9 +6,15 @@ import type { TrpcSessionUser } from "@calcom/trpc/server/types";
 
 class PermissionCheckService {
   constructor(_prisma?: unknown) {}
-  async checkPermission(..._args: unknown[]) { return true; }
-  async hasPermission(..._args: unknown[]) { return true; }
-  async getTeamIdsWithPermission(..._args: unknown[]): Promise<number[]> { return []; }
+  async checkPermission(..._args: unknown[]) {
+    return true;
+  }
+  async hasPermission(..._args: unknown[]) {
+    return true;
+  }
+  async getTeamIdsWithPermission(..._args: unknown[]): Promise<number[]> {
+    return [];
+  }
 }
 
 type checkInvalidAppCredentialsOptions = {
@@ -28,6 +34,7 @@ export const checkInvalidAppCredentials = async ({ ctx }: checkInvalidAppCredent
   });
 
   const apps = await prisma.credential.findMany({
+    distinct: ["appId"],
     where: {
       OR: [{ userId }, { teamId: { in: userTeamIds } }],
       invalid: true,
