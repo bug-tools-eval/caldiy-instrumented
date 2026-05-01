@@ -1,30 +1,27 @@
 import { WEBAPP_URL } from "@calcom/lib/constants";
-import { buildLegacyCtx, decodeParams } from "@lib/buildLegacyCtx";
+import { type buildLegacyCtx, decodeParams } from "@lib/buildLegacyCtx";
 import { getServerSideProps } from "@server/lib/[user]/getServerSideProps";
 import type { PageProps } from "app/_types";
 import { generateMeetingMetadata } from "app/_utils";
+import { createCachedLegacyPageData } from "app/legacyPageDataCache";
 import { withAppDirSsr } from "app/WithAppDirSsr";
 import type { Metadata } from "next";
-import { cookies, headers } from "next/headers";
-import type React from "react";
 import type { PageProps as LegacyPageProps } from "~/users/views/users-public-view";
 import LegacyPage from "~/users/views/users-public-view";
 
 const getData: (ctx: ReturnType<typeof buildLegacyCtx>) => Promise<LegacyPageProps> =
   withAppDirSsr<LegacyPageProps>(getServerSideProps);
 
+const getPageData: (pageProps: PageProps) => Promise<LegacyPageProps> = createCachedLegacyPageData(getData);
+
 const ServerPage = async ({ params, searchParams }: PageProps): Promise<JSX.Element> => {
-  const props = await getData(
-    buildLegacyCtx(await headers(), await cookies(), await params, await searchParams)
-  );
+  const props = await getPageData({ params, searchParams });
 
   return <LegacyPage {...props} />;
 };
 
 export const generateMetadata = async ({ params, searchParams }: PageProps): Promise<Metadata> => {
-  const props = await getData(
-    buildLegacyCtx(await headers(), await cookies(), await params, await searchParams)
-  );
+  const props = await getPageData({ params, searchParams });
 
   const { profile, markdownStrippedBio, isOrgSEOIndexable } = props;
   const isOrg = !!profile?.organization;
