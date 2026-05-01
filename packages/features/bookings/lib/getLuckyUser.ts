@@ -185,9 +185,10 @@ export class LuckyUserService implements ILuckyUserService {
 
     const attendeeUserIdAndAtCreatedPair = bookingsOfAvailableUsers.reduce(
       (aggregate: { [userId: number]: Date }, booking) => {
+        const attendeeEmails = new Set(booking.attendees.map((attendee) => attendee.email));
         availableUsers.forEach((user) => {
           if (aggregate[user.id]) return;
-          if (!booking.attendees.map((attendee) => attendee.email).includes(user.email)) return;
+          if (!attendeeEmails.has(user.email)) return;
           if (organizerIdAndAtCreatedPair[user.id] > booking.createdAt) return;
           aggregate[user.id] = booking.createdAt;
         });
@@ -374,10 +375,17 @@ export class LuckyUserService implements ILuckyUserService {
       return totalCalibration;
     }, 0);
 
+    const attributeWeightByUserId = attributeWeights
+      ? new Map(attributeWeights.map((entry) => [entry.userId, entry.weight]))
+      : null;
+    const calibrationByUserId = new Map(
+      allHostsWithCalibration.map((host) => [host.userId, host.calibration])
+    );
+
     const usersWithBookingShortfalls = availableUsers.map((user) => {
       let userWeight = user.weight ?? 100;
-      if (attributeWeights) {
-        userWeight = attributeWeights.find((userWeight) => userWeight.userId === user.id)?.weight ?? 100;
+      if (attributeWeightByUserId) {
+        userWeight = attributeWeightByUserId.get(user.id) ?? 100;
       }
       const targetPercentage = userWeight / totalWeight;
       const userBookings = bookingsOfAvailableUsersOfInterval.filter(
@@ -386,8 +394,7 @@ export class LuckyUserService implements ILuckyUserService {
       );
 
       const targetNumberOfBookings = (allBookings.length + totalCalibration) * targetPercentage;
-      const userCalibration =
-        allHostsWithCalibration.find((host) => host.userId === user.id)?.calibration ?? 0;
+      const userCalibration = calibrationByUserId.get(user.id) ?? 0;
 
       const bookingShortfall = targetNumberOfBookings - (userBookings.length + userCalibration);
 
@@ -857,8 +864,9 @@ export class LuckyUserService implements ILuckyUserService {
         (booking) => booking.userId === luckyUser.id
       ).length;
       remainingAvailableUsers = remainingAvailableUsers.filter((user) => user.id !== luckyUser.id);
+      const remainingUserIds = new Set(remainingAvailableUsers.map((user) => user.id));
       bookingsOfRemainingAvailableUsersOfInterval = bookingsOfRemainingAvailableUsersOfInterval.filter(
-        (booking) => remainingAvailableUsers.map((user) => user.id).includes(booking.userId ?? 0)
+        (booking) => remainingUserIds.has(booking.userId ?? 0)
       );
     }
 

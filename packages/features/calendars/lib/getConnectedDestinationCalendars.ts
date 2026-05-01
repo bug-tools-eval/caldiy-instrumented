@@ -397,14 +397,15 @@ export async function getConnectedDestinationCalendarsAndEnsureDefaultsInDb({
         item.credential as CredentialDataWithTeamName & { selectedCalendars: { id: string }[] };
 
       const safeToSendIntegration = cleanIntegrationKeys(integration);
+      const credentialSelectedIds = new Set(
+        credential.selectedCalendars.map((appSelectedCal) => appSelectedCal.id)
+      );
       connectedCalendars.push({
         integration: safeToSendIntegration,
         credentialId: credential.id,
         delegationCredentialId: credential.delegationCredentialId,
         calendars: selectedCalendars
-          .filter((cal) =>
-            credential.selectedCalendars.some((appSelectedCal) => appSelectedCal.id === cal.id)
-          )
+          .filter((cal) => credentialSelectedIds.has(cal.id))
           .map((cal) => ({
             ...cal,
             isSelected: true,

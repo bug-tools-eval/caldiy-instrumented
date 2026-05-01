@@ -78,8 +78,8 @@ export const eventOwnerProcedure = authedProcedure
 
     const isAllowed = (() => {
       if (event.team) {
-        const allTeamMembers = event.team.members.map((member) => member.userId);
-        return input.users.every((userId: number) => allTeamMembers.includes(userId));
+        const allTeamMembers = new Set(event.team.members.map((member) => member.userId));
+        return input.users.every((userId: number) => allTeamMembers.has(userId));
       }
       return input.users.every((userId: number) => userId === ctx.user.id);
     })();
@@ -178,8 +178,8 @@ export const createEventPbacProcedure = (
       if (input.users && input.users.length > 0) {
         const isAllowed = (() => {
           if (event.team) {
-            const allTeamMembers = event.team.members.map((member) => member.userId);
-            return input.users?.every((userId: number) => allTeamMembers.includes(userId)) ?? true;
+            const allTeamMembers = new Set(event.team.members.map((member) => member.userId));
+            return input.users?.every((userId: number) => allTeamMembers.has(userId)) ?? true;
           }
           return input.users?.every((userId: number) => userId === ctx.user.id) ?? true;
         })();

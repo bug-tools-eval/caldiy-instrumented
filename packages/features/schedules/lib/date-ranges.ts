@@ -47,10 +47,10 @@ export function processWorkingHours(
 ) {
   const utcDateTo = dateTo.utc();
   let endTimeToKeyMap: Map<number, number[]> | undefined;
+  const dateFromStartOfDay = dateFrom.startOf("day");
+  const fromOffset = dateFromStartOfDay.utcOffset();
 
-  for (let date = dateFrom.startOf("day"); utcDateTo.isAfter(date); date = date.add(1, "day")) {
-    const fromOffset = dateFrom.startOf("day").utcOffset();
-
+  for (let date = dateFromStartOfDay; utcDateTo.isAfter(date); date = date.add(1, "day")) {
     const adjustedTimezone = getAdjustedTimezone(date, timeZone, travelSchedules);
 
     const offset = date.tz(adjustedTimezone).utcOffset();

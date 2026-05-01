@@ -35,11 +35,12 @@ const combineTwoSeatedBookings = async (
   const attendeesToMove = [],
     attendeesToDelete = [];
 
+  const newBookingAttendeeEmails = new Set(
+    newTimeSlotBooking.attendees.map((newBookingAttendee) => newBookingAttendee.email)
+  );
   for (const attendee of seatedBooking.attendees) {
     // If the attendee already exists on the new booking then delete the attendee record of the old booking
-    if (
-      newTimeSlotBooking.attendees.some((newBookingAttendee) => newBookingAttendee.email === attendee.email)
-    ) {
+    if (newBookingAttendeeEmails.has(attendee.email)) {
       attendeesToDelete.push(attendee.id);
       // If the attendee does not exist on the new booking then move that attendee record to the new booking
     } else {

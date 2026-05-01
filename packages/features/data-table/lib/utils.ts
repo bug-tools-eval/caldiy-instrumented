@@ -67,9 +67,11 @@ export const multiSelectFilter = (cellValue: unknown | undefined, filterValue: M
   }
 
   if (isAllString(filterValueArray) && isAllString(cellValueArray)) {
-    return cellValueArray.some((v) => filterValueArray.includes(v));
+    const filterValueSet = new Set<string>(filterValueArray);
+    return cellValueArray.some((v) => filterValueSet.has(v));
   } else if (isAllNumber(filterValueArray) && isAllNumber(cellValueArray)) {
-    return cellValueArray.some((v) => filterValueArray.includes(v));
+    const filterValueSet = new Set<number>(filterValueArray);
+    return cellValueArray.some((v) => filterValueSet.has(v));
   }
 
   return false;

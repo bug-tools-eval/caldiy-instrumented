@@ -24,13 +24,15 @@ export async function getCloseComContactIds(
   //       messing around with the expected number of contacts retrieved
   if (closeComContacts.data.length < persons.length && leadFromCalComId) {
     // Create missing contacts
-    const personsEmails = persons.map((att) => att.email);
+    const personsEmailSet = new Set(persons.map((att) => att.email));
     // Existing contacts based on persons emails: contacts may have more
     // than one email, we just need the one used by the event.
-    const existingContactsEmails = closeComContacts.data.flatMap((cont) =>
-      cont.emails.filter((em) => personsEmails.includes(em.email)).map((ems) => ems.email)
+    const existingContactsEmailSet = new Set(
+      closeComContacts.data.flatMap((cont) =>
+        cont.emails.filter((em) => personsEmailSet.has(em.email)).map((ems) => ems.email)
+      )
     );
-    const nonExistingContacts = persons.filter((person) => !existingContactsEmails.includes(person.email));
+    const nonExistingContacts = persons.filter((person) => !existingContactsEmailSet.has(person.email));
     const createdContacts = await Promise.all(
       nonExistingContacts.map(
         async (per) =>
@@ -106,12 +108,15 @@ export async function getCustomFieldsIds(
   } else {
     relevantFields = allFields.data as CloseComCustomActivityFieldGet["data"];
   }
-  const customFieldsNames = relevantFields.map((fie) => fie.name);
-  const customFieldsExist = customFields.map((cusFie) => customFieldsNames.includes(cusFie[0]));
+  const fieldByName = new Map<string, { id: string }>();
+  relevantFields.forEach((field) => {
+    fieldByName.set(field.name, field);
+  });
   return await Promise.all(
-    customFieldsExist.flatMap(async (exist, idx) => {
-      if (!exist && entity !== "shared") {
-        const [name, type, required, multiple] = customFields[idx];
+    customFields.flatMap(async (cusFie) => {
+      const existingField = fieldByName.get(cusFie[0]);
+      if (!existingField && entity !== "shared") {
+        const [name, type, required, multiple] = cusFie;
         let created: CloseComCustomFieldCreateResponse["data"];
         if (entity === "activity" && custom_activity_type_id) {
           created = await closeCom.customField[entity].create({
@@ -135,13 +140,10 @@ export async function getCustomFieldsIds(
             return created.id;
           }
         }
+      } else if (existingField) {
+        return existingField.id;
       } else {
-        const index = customFieldsNames.findIndex((val) => val === customFields[idx][0]);
-        if (index >= 0) {
-          return relevantFields[index].id;
-        } else {
-          throw Error("Couldn't find the field index");
-        }
+        throw Error("Couldn't find the field index");
       }
       // Return an array with a single undefined value for the case where "exist" is true
       return "";

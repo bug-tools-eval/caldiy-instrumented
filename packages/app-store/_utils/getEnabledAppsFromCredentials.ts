@@ -71,9 +71,9 @@ const getEnabledAppsFromCredentials = async (
   enabledApps = [...enabledApps, ...delegationCredentialSupportedEnabledApps];
 
   const apps = getApps(credentials, filterOnCredentials);
+  const enabledAppSlugs = new Set(enabledApps.filter((metadata) => metadata.enabled).map((m) => m.slug));
   const filteredApps = apps.reduce((reducedArray, app) => {
-    const appDbQuery = enabledApps.find((metadata) => metadata.slug === app.slug);
-    if (appDbQuery?.enabled || app.isGlobal) {
+    if (enabledAppSlugs.has(app.slug) || app.isGlobal) {
       reducedArray.push({ ...app, enabled: true });
     }
     return reducedArray;

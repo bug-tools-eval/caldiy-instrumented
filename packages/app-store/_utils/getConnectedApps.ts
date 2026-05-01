@@ -146,18 +146,29 @@ export async function getConnectedApps({
     filterOnCredentials: onlyInstalled,
     ...(appId ? { where: { slug: appId } } : {}),
   });
+  // Bucket credentials by appId once so the per-app lookups below are O(1) instead of
+  // re-scanning the full credentials array three times per app.
+  const credentialsByAppSlug = new Map<string | null, typeof credentials>();
+  for (const c of credentials) {
+    const arr = credentialsByAppSlug.get(c.appId);
+    if (arr) arr.push(c);
+    else credentialsByAppSlug.set(c.appId, [c]);
+  }
+  const userTeamById = new Map(userTeams.map((team) => [team.id, team]));
+  const installedAppSlugs = new Set(
+    enabledApps.filter((dbApp) => dbApp.credentials.length).map((dbApp) => dbApp.slug)
+  );
   //TODO: Refactor this to pick up only needed fields and prevent more leaking
   let apps = await Promise.all(
     enabledApps.map(async ({ credentials: _, credential, key: _2 /* don't leak to frontend */, ...app }) => {
-      const userCredentialIds = credentials.filter((c) => c.appId === app.slug && !c.teamId).map((c) => c.id);
-      const invalidCredentialIds = credentials
-        .filter((c) => c.appId === app.slug && c.invalid)
-        .map((c) => c.id);
+      const credentialsForApp = credentialsByAppSlug.get(app.slug) ?? [];
+      const userCredentialIds = credentialsForApp.filter((c) => !c.teamId).map((c) => c.id);
+      const invalidCredentialIds = credentialsForApp.filter((c) => c.invalid).map((c) => c.id);
       const teams = await Promise.all(
-        credentials
-          .filter((c) => c.appId === app.slug && c.teamId)
+        credentialsForApp
+          .filter((c) => c.teamId)
           .map(async (c) => {
-            const team = userTeams.find((team) => team.id === c.teamId);
+            const team = c.teamId != null ? userTeamById.get(c.teamId) : undefined;
             if (!team) {
               return null;
             }
@@ -194,9 +205,7 @@ export async function getConnectedApps({
       let dependencyData: TDependencyData = [];
       if (app.dependencies?.length) {
         dependencyData = app.dependencies.map((dependency) => {
-          const dependencyInstalled = enabledApps.some(
-            (dbAppIterator) => dbAppIterator.credentials.length && dbAppIterator.slug === dependency
-          );
+          const dependencyInstalled = installedAppSlugs.has(dependency);
           // If the app marked as dependency is simply deleted from the codebase, we can have the situation where App is marked installed in DB but we couldn't get the app.
           const dependencyName = getAppFromSlug(dependency)?.name;
           return { name: dependencyName, installed: dependencyInstalled };

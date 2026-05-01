@@ -324,9 +324,11 @@ export class UserAvailabilityService {
       dateTo: dateTo.format(),
     });
 
+    const hostEmailSet = isTeamEvent && hostEmails ? new Set(hostEmails) : null;
+
     return bookings.map((booking) => {
-      const attendees = isTeamEvent
-        ? booking.attendees.filter((attendee) => !hostEmails?.includes(attendee.email))
+      const attendees = hostEmailSet
+        ? booking.attendees.filter((attendee) => !hostEmailSet.has(attendee.email))
         : booking.attendees;
 
       return {
@@ -732,6 +734,9 @@ export class UserAvailabilityService {
       return {};
     }
 
+    // Working days from availability are the same for every OOO entry, so compute once.
+    const flattenDays = new Set(availability.flatMap((a) => ("days" in a ? a.days : [])));
+
     return outOfOfficeDays.reduce(
       (acc: IOutOfOfficeData, { start, end, toUser, user, reason, notes, showNotePublicly }) => {
         // here we should use startDate or today if start is before today
@@ -740,38 +745,33 @@ export class UserAvailabilityService {
           ? dayjs().utc().startOf("day")
           : dayjs(start).utc().startOf("day");
 
-        // get number of day in the week and see if it's on the availability
-        const flattenDays = Array.from(
-          new Set(availability.flatMap((a) => ("days" in a ? a.days : [])))
-        ).sort((a, b) => a - b);
-
         const endDateRange = dayjs(end).utc().endOf("day");
+
+        // These don't depend on the date being iterated; compute once per OOO entry.
+        const resolvedNotes = showNotePublicly ? notes : null;
+        const toUserData = toUser
+          ? { id: toUser.id, displayName: toUser.name, username: toUser.username }
+          : null;
+        const fromUserData = { id: user.id, displayName: user.name };
+        const reasonText = reason?.reason || null;
+        const reasonEmoji = reason?.emoji || null;
 
         for (let date = startDateRange; date.isBefore(endDateRange); date = date.add(1, "day")) {
           const dayNumberOnWeek = date.day();
 
-          if (!flattenDays?.includes(dayNumberOnWeek)) {
+          if (!flattenDays.has(dayNumberOnWeek)) {
             continue; // Skip to the next iteration if day not found in flattenDays
-          }
-          // null notes if not to be shown publicly
-          if (!showNotePublicly) {
-            notes = null;
-          }
-
-          let toUserData = null;
-          if (toUser) {
-            toUserData = { id: toUser.id, displayName: toUser.name, username: toUser.username };
           }
 
           acc[date.format("YYYY-MM-DD")] = {
             // @TODO:  would be good having start and end availability time here, but for now should be good
             // you can obtain that from user availability defined outside of here
-            fromUser: { id: user.id, displayName: user.name },
+            fromUser: fromUserData,
             // optional chaining destructuring toUser
             toUser: toUserData,
-            reason: reason?.reason || null,
-            emoji: reason?.emoji || null,
-            notes,
+            reason: reasonText,
+            emoji: reasonEmoji,
+            notes: resolvedNotes,
             showNotePublicly,
           };
         }
@@ -857,9 +857,7 @@ export class UserAvailabilityService {
     }
 
     // Match OOO pattern: get working days from availability
-    const flattenDays = Array.from(new Set(availability.flatMap((a) => ("days" in a ? a.days : [])))).sort(
-      (a, b) => a - b
-    );
+    const flattenDays = new Set(availability.flatMap((a) => ("days" in a ? a.days : [])));
 
     const result: IOutOfOfficeData = {};
 
@@ -867,7 +865,7 @@ export class UserAvailabilityService {
       // Match OOO pattern: use dayjs.utc() to parse date string and get day of week
       const dayOfWeek = dayjs.utc(date).day();
 
-      if (!flattenDays.includes(dayOfWeek)) {
+      if (!flattenDays.has(dayOfWeek)) {
         continue;
       }
 

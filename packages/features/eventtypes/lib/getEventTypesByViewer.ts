@@ -71,6 +71,8 @@ export const getEventTypesByViewer = async (user: User, filters?: Filters) => {
       fallbackRoles: [MembershipRole.ADMIN, MembershipRole.OWNER],
     }),
   ]);
+  const teamsWithEventTypeReadPermissionSet = new Set(teamsWithEventTypeReadPermission);
+  const teamsWithEventTypeUpdatePermissionSet = new Set(teamsWithEventTypeUpdatePermission);
 
   const eventTypeRepo = new EventTypeRepository(prisma);
   const [profileMemberships, profileEventTypes] = await Promise.all([
@@ -227,6 +229,9 @@ export const getEventTypesByViewer = async (user: User, filters?: Filters) => {
     teamId: membership.team.id,
     membershipRole: membership.role,
   }));
+  const teamMembershipRoleByTeamId = new Map(
+    teamMemberships.map((teamM) => [teamM.teamId, teamM.membershipRole])
+  );
 
   const filterByTeamIds = async (eventType: Awaited<ReturnType<typeof mapEventType>>) => {
     if (!filters || !hasFilter(filters)) {
@@ -259,9 +264,10 @@ export const getEventTypesByViewer = async (user: User, filters?: Filters) => {
           }
         })
         .map(async (membership) => {
-          const orgMembership = teamMemberships.find(
-            (teamM) => teamM.teamId === membership.team.parentId
-          )?.membershipRole;
+          const orgMembership =
+            membership.team.parentId != null
+              ? teamMembershipRoleByTeamId.get(membership.team.parentId)
+              : undefined;
 
           const team = {
             ...membership.team,
@@ -292,7 +298,7 @@ export const getEventTypesByViewer = async (user: User, filters?: Filters) => {
             },
             metadata: {
               membershipCount: team.members.length,
-              readOnly: !teamsWithEventTypeReadPermission.includes(team.id),
+              readOnly: !teamsWithEventTypeReadPermissionSet.has(team.id),
             },
             eventTypes: eventTypes
               .filter(filterByTeamIds)
@@ -301,7 +307,7 @@ export const getEventTypesByViewer = async (user: User, filters?: Filters) => {
                 return res;
               })
               .filter((evType) =>
-                !teamsWithEventTypeUpdatePermission.includes(team.id)
+                !teamsWithEventTypeUpdatePermissionSet.has(team.id)
                   ? evType.schedulingType !== SchedulingType.MANAGED
                   : true
               )
