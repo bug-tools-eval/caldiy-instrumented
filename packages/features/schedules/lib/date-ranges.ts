@@ -337,7 +337,7 @@ export function groupByDate(ranges: DateRange[]): { [x: string]: DateRange[] } {
       },
       currentValue
     ) => {
-      const dateString = dayjs(currentValue.start).format("YYYY-MM-DD");
+      const dateString = currentValue.start.format("YYYY-MM-DD");
 
       previousValue[dateString] =
         typeof previousValue[dateString] === "undefined"

@@ -1,3 +1,4 @@
+import process from "node:process";
 import type { Dayjs } from "@calcom/dayjs";
 import dayjs from "@calcom/dayjs";
 import type {
@@ -122,7 +123,40 @@ function buildSlotsWithDateRanges({
 
   const startTimeWithMinNotice = dayjs.utc().add(minimumBookingNotice, "minute");
 
-  const slotBoundaries = new Map<number, true>();
+  // Maintain slot start-time boundaries in a sorted array so we can binary-search
+  // for "largest boundary strictly less than slotStartTime". Within a range, slot
+  // times grow monotonically (so insertions append in O(1)); across ranges that
+  // happen to overlap, the rare out-of-order insert falls back to a splice. This
+  // replaces the previous Array.from(map.keys()).sort() that ran per range.
+  const sortedBoundaries: number[] = [];
+  const findLargestBoundaryLessThan = (target: number): number | null => {
+    if (sortedBoundaries.length === 0) return null;
+    // Binary search for the rightmost element strictly less than target.
+    let lo = 0;
+    let hi = sortedBoundaries.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if (sortedBoundaries[mid] < target) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo === 0 ? null : sortedBoundaries[lo - 1];
+  };
+  const insertBoundary = (value: number) => {
+    if (sortedBoundaries.length === 0 || value > sortedBoundaries[sortedBoundaries.length - 1]) {
+      sortedBoundaries.push(value);
+      return;
+    }
+    // Out-of-order insert (overlapping ranges) — splice into the right slot.
+    let lo = 0;
+    let hi = sortedBoundaries.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if (sortedBoundaries[mid] < value) lo = mid + 1;
+      else hi = mid;
+    }
+    if (sortedBoundaries[lo] === value) return; // already inserted
+    sortedBoundaries.splice(lo, 0, value);
+  };
 
   orderedDateRanges.forEach((range) => {
     let slotStartTime = range.start.utc().isAfter(startTimeWithMinNotice)
@@ -148,30 +182,18 @@ function buildSlotsWithDateRanges({
 
     slotStartTime = slotStartTime.add(offsetStart ?? 0, "minutes");
 
-    // Find the nearest appropriate slot boundary if this time falls within an existing slot
-    const slotBoundariesValueArray = Array.from(slotBoundaries.keys());
-    if (slotBoundariesValueArray.length > 0) {
-      slotBoundariesValueArray.sort((a, b) => a - b);
-
-      let prevBoundary = null;
-      for (let i = slotBoundariesValueArray.length - 1; i >= 0; i--) {
-        if (slotBoundariesValueArray[i] < slotStartTime.valueOf()) {
-          prevBoundary = slotBoundariesValueArray[i];
-          break;
+    // Find the nearest appropriate slot boundary if this time falls within an existing slot.
+    const prevBoundary = findLargestBoundaryLessThan(slotStartTime.valueOf());
+    if (prevBoundary !== null) {
+      const prevBoundaryEnd = dayjs(prevBoundary).add(frequency + (offsetStart ?? 0), "minutes");
+      if (prevBoundaryEnd.isAfter(slotStartTime)) {
+        const dayjsPrevBoundary = dayjs(prevBoundary);
+        if (!dayjsPrevBoundary.isBefore(range.start)) {
+          slotStartTime = dayjsPrevBoundary;
+        } else {
+          slotStartTime = prevBoundaryEnd;
         }
-      }
-
-      if (prevBoundary) {
-        const prevBoundaryEnd = dayjs(prevBoundary).add(frequency + (offsetStart ?? 0), "minutes");
-        if (prevBoundaryEnd.isAfter(slotStartTime)) {
-          const dayjsPrevBoundary = dayjs(prevBoundary);
-          if (!dayjsPrevBoundary.isBefore(range.start)) {
-            slotStartTime = dayjsPrevBoundary;
-          } else {
-            slotStartTime = prevBoundaryEnd;
-          }
-          slotStartTime = slotStartTime.tz(timeZone);
-        }
+        slotStartTime = slotStartTime.tz(timeZone);
       }
     }
 
@@ -182,9 +204,9 @@ function buildSlotsWithDateRanges({
         continue;
       }
 
-      slotBoundaries.set(slotStartTime.valueOf(), true);
+      insertBoundary(slotStartTime.valueOf());
 
-      let dateOutOfOfficeExists = undefined;
+      let dateOutOfOfficeExists;
       if (datesOutOfOffice) {
         const slotDateYYYYMMDD = datesOutOfOfficeTimeZone
           ? slotStartTime.tz(datesOutOfOfficeTimeZone).format("YYYY-MM-DD")
