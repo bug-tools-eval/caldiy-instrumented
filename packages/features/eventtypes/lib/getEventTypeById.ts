@@ -117,6 +117,10 @@ export const getEventTypeById = async ({
 
   const parsedCustomInputs = (rawEventType.customInputs || []).map((input) => customInputSchema.parse(input));
 
+  const teamMemberRoleByUserId = new Map(
+    restEventType.team?.members.map((tm) => [tm.user.id, tm.role]) ?? []
+  );
+
   const eventType = {
     ...restEventType,
     schedule:
@@ -152,7 +156,7 @@ export const getEventTypeById = async ({
               name: ch.owner.name ?? "",
               username: ch.owner.username ?? "",
               membership:
-                restEventType.team?.members.find((tm) => tm.user.id === ch.owner?.id)?.role ||
+                (ch.owner.id != null ? teamMemberRoleByUserId.get(ch.owner.id) : undefined) ||
                 MembershipRole.MEMBER,
             },
             created: true,
