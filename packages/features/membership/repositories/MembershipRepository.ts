@@ -176,7 +176,10 @@ export class MembershipRepository {
    */
   static async findAllByUpIdIncludeTeamWithMembersAndEventTypes(
     { upId }: { upId: string },
-    { where }: { where?: Prisma.MembershipWhereInput } = {}
+    {
+      where,
+      eventTypeWhere,
+    }: { where?: Prisma.MembershipWhereInput; eventTypeWhere?: Prisma.EventTypeWhereInput } = {}
   ) {
     const prismaWhere = await getWhereForfindAllByUpId(upId, where);
     if (Array.isArray(prismaWhere)) {
@@ -202,6 +205,7 @@ export class MembershipRepository {
               select: teamParentSelect,
             },
             eventTypes: {
+              where: eventTypeWhere,
               select: {
                 ...eventTypeSelect,
                 hashedLink: true,

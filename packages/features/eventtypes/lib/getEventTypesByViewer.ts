@@ -12,6 +12,7 @@ import logger from "@calcom/lib/logger";
 import { markdownToSafeHTML } from "@calcom/lib/markdownToSafeHTML";
 import { safeStringify } from "@calcom/lib/safeStringify";
 import prisma from "@calcom/prisma";
+import type { Prisma } from "@calcom/prisma/client";
 import { MembershipRole, SchedulingType } from "@calcom/prisma/enums";
 import { eventTypeMetaDataSchemaWithUntypedApps, teamMetadataSchema } from "@calcom/prisma/zod-utils";
 import type { UserProfile } from "@calcom/types/UserProfile";
@@ -81,15 +82,30 @@ export const getEventTypesByViewer = async (user: User, filters?: Filters) => {
   ]);
 
   const eventTypeRepo = new EventTypeRepository(prisma);
+  const membershipWhere: Prisma.MembershipWhereInput = {
+    accepted: true,
+  };
+  if (filters?.teamIds) {
+    membershipWhere.teamId = { in: filters.teamIds };
+  }
+
+  let teamEventTypeWhere: Prisma.EventTypeWhereInput | undefined;
+  if (filters?.schedulingTypes) {
+    teamEventTypeWhere = {
+      schedulingType: {
+        in: filters.schedulingTypes,
+      },
+    };
+  }
+
   const [profileMemberships, profileEventTypes] = await Promise.all([
     MembershipRepository.findAllByUpIdIncludeTeamWithMembersAndEventTypes(
       {
         upId: userProfile.upId,
       },
       {
-        where: {
-          accepted: true,
-        },
+        where: membershipWhere,
+        eventTypeWhere: teamEventTypeWhere,
       }
     ),
     shouldListUserEvents
