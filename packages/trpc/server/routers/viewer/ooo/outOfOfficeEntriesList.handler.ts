@@ -71,12 +71,14 @@ export const outOfOfficeEntriesList = async ({ ctx, input }: GetOptions) => {
     }
     fetchOOOEntriesForIds = userIds;
 
-    const adminTeams = teamMembers.filter(({ id }) => ownerOrAdminTeamIds.includes(id));
+    const ownerOrAdminTeamIdSet = new Set(ownerOrAdminTeamIds);
+    const adminTeams = teamMembers.filter(({ id }) => ownerOrAdminTeamIdSet.has(id));
 
     reportingUserIds = adminTeams.flatMap(({ members }) =>
       members.filter(({ accepted, userId }) => accepted && userId !== ctx.user.id).map(({ userId }) => userId)
     );
   }
+  const reportingUserIdSet = new Set(reportingUserIds);
 
   const whereClause = {
     userId: {
@@ -169,7 +171,7 @@ export const outOfOfficeEntriesList = async ({ ctx, input }: GetOptions) => {
       outOfOfficeEntries.map((ooo) => {
         return {
           ...ooo,
-          canEditAndDelete: fetchTeamMembersEntries ? reportingUserIds.includes(ooo.user.id) : true,
+          canEditAndDelete: fetchTeamMembersEntries ? reportingUserIdSet.has(ooo.user.id) : true,
         };
       }) || [],
     nextCursor,

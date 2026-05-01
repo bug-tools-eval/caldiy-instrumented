@@ -1179,14 +1179,18 @@ export class AvailableSlotsService {
         (item) => item.isSeat && item.eventTypeId === eventType.id
       );
       if (occupiedSeats?.length) {
-        const addedToCurrentSeats: string[] = [];
+        const addedToCurrentSeats = new Set<string>();
         if (typeof availabilityCheckProps.currentSeats !== "undefined") {
+          // Pre-bucket occupied seats by their slot ISO so each currentSeat lookup is O(1).
+          const occupiedSeatCountByIso = new Map<string, number>();
+          for (const seat of occupiedSeats) {
+            const iso = seat.slotUtcStartDate.toISOString();
+            occupiedSeatCountByIso.set(iso, (occupiedSeatCountByIso.get(iso) ?? 0) + 1);
+          }
           availabilityCheckProps.currentSeats = availabilityCheckProps.currentSeats.map((item) => {
-            const attendees =
-              occupiedSeats.filter(
-                (seat) => seat.slotUtcStartDate.toISOString() === item.startTime.toISOString()
-              )?.length || 0;
-            if (attendees) addedToCurrentSeats.push(item.startTime.toISOString());
+            const iso = item.startTime.toISOString();
+            const attendees = occupiedSeatCountByIso.get(iso) ?? 0;
+            if (attendees) addedToCurrentSeats.add(iso);
             return {
               ...item,
               _count: {
@@ -1195,7 +1199,7 @@ export class AvailableSlotsService {
             };
           });
           occupiedSeats = occupiedSeats.filter(
-            (item) => !addedToCurrentSeats.includes(item.slotUtcStartDate.toISOString())
+            (item) => !addedToCurrentSeats.has(item.slotUtcStartDate.toISOString())
           );
         }
 

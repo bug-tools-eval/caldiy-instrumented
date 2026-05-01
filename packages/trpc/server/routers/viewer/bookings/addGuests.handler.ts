@@ -213,13 +213,16 @@ export async function sanitizeAndFilterGuests(
     guests.map((guest) => [extractBaseEmail(guest.email).toLowerCase(), guest])
   );
 
+  const existingAttendeeEmails = new Set(
+    booking.attendees.map((attendee) => extractBaseEmail(attendee.email).toLowerCase())
+  );
+  const blacklistedGuestEmailSet = new Set(blacklistedGuestEmails);
+
   const uniqueGuestEmails = deduplicatedGuests.filter((email) => {
     const baseGuestEmail = extractBaseEmail(email).toLowerCase();
     return (
-      !booking.attendees.some(
-        (attendee) => extractBaseEmail(attendee.email).toLowerCase() === baseGuestEmail
-      ) &&
-      !blacklistedGuestEmails.includes(baseGuestEmail) &&
+      !existingAttendeeEmails.has(baseGuestEmail) &&
+      !blacklistedGuestEmailSet.has(baseGuestEmail) &&
       !emailToRequiresVerification.get(baseGuestEmail)
     );
   });
